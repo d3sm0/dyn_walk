@@ -4,6 +4,15 @@ import numpy as np
 from replay_buffer import ReplayBuffer
 
 
+# reverse the paradigm: experience with local agents, compute gradients locally, but apply to the global network
+# after T iteration, copy the global params down to the local network..
+
+# def train_op(global_vars , gradients , optim=tf.train.RMSPropOptimizer ( 0.0001 ) , max_clip=40.0):
+#     grads_clipped , _ = tf.clip_by_global_norm ( gradients , max_clip )
+#     return optim.apply_gradients ( list ( zip ( grads_clipped , global_vars ) ) ,
+#                                    global_step=tf.contrib.framework.get_global_step () )
+
+
 class Agent ( object ):
     def __init__(self , name , env_dim , target=None , writer=None , h_size=128 , memory_size=10e6, stochastic = False):
 
@@ -17,6 +26,7 @@ class Agent ( object ):
         self.memory = ReplayBuffer ( env_shape=env_dim , buffer_size=memory_size )
 
         if name != 'target':
+            # reverse this, from global to local
             self.sync_op = [ self.update_target ( self.actor.params , target.actor.params ) ,
                              self.update_target ( self.critic.params , target.critic.params ) ]
 
@@ -34,6 +44,7 @@ class Agent ( object ):
         tf.logging.info('Worker {} ready to go ...'.format(self.name))
 
     def summarize(self , feed_dict , global_step):
+
         sess = tf.get_default_session ()
 
         summary = sess.run ( self.summary_ops ,
@@ -130,6 +141,7 @@ class Agent ( object ):
             c_loss = self.train ( s1_batch , a_batch , y_i , get_summary=summarize )
 
     @staticmethod
+    # tau = 0.001
     def update_target(local , target , tau=0.01):
         params = [ ]
         for i in range ( len ( target ) ):

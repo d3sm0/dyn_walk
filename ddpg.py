@@ -5,8 +5,9 @@ from tensorflow.contrib.layers import fully_connected , summarize_activation , c
 
 # if determistic policyr use relu activation
 # relu activation should approximate hirerarchial rbf kernel behavior
+
 class Actor ( object ):
-    def __init__(self , obs_space , action_space , action_bound , h_size , lr=1e-4, act = tf.nn.relu, stochastic = False):
+    def __init__(self , obs_space , action_space , action_bound , h_size , lr=1e-4, act = tf.nn.elu, stochastic = False):
         self.state = tf.placeholder ( 'float32' , shape=[ None , obs_space ] , name='state' )
         self.grads = tf.placeholder ( 'float32' , shape=[ None , action_space ] , name='gradients' )
 
@@ -48,7 +49,7 @@ class Actor ( object ):
 
 
 class Critic ( object ):
-    def __init__(self , obs_space , action_space , h_size , lr=1e-3, act = tf.nn.relu):
+    def __init__(self , obs_space , action_space , h_size , lr=1e-3, act = tf.nn.elu):
         self.state = tf.placeholder ( 'float32' , shape=[ None , obs_space ] , name='state' )
         self.action = tf.placeholder ( 'float32' , shape=[ None , action_space ] , name='action' )
 
