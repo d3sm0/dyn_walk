@@ -39,10 +39,9 @@ LOG_DIR = 'logs'
 # multi thread does not scale
 # CPU_CORE = multiprocessing.cpu_count()
 CPU_CORE = 1
-# now = datetime.utcnow ().strftime ( "%b-%d_%H_%M" )  # create unique dir
-now = 'Aug-18_20_25'
+now = datetime.utcnow ().strftime ( "%b-%d_%H_%M" )  # create unique dir
+# now = 'Aug-18_20_25'
 full_path = os.path.join ( os.getcwd () , 'logs' , now )
-
 
 def main():
     env = gym.make ( ENV_NAME )
@@ -64,9 +63,6 @@ def main():
     coord = tf.train.Coordinator ()
     ckpt = tf.train .latest_checkpoint ( full_path )
 
-    # TODO fix this
-    # workers.append ( Worker ( env=env , agent=target))
-
     global_step = tf.Variable ( 0 , trainable=False , name='global_step' )
 
     for i in range ( CPU_CORE ):
@@ -76,7 +72,7 @@ def main():
 
     with tf.Session () as sess:
 
-        global_step = tf.Variable ( 0 , trainable=False , name='global_step' )
+
         sess.run ( tf.global_variables_initializer () )
 
         if ckpt:
@@ -89,13 +85,13 @@ def main():
             t.start ()
             threads.append ( t )
 
-        save_th = th.Thread ( target=cont_save ( SAVE_EVERY , target , coord , saver , writer ) )
-        save_th.start ()
+        save_th = th.Thread ( target=cont_save ( SAVE_EVERY , target , coord , saver ) )
+        save_th.run()
         # save_th.join()
         coord.join ( threads )
 
 
-def cont_save(save_every , agent , coord , saver , writer):
+def cont_save(save_every , agent , coord , saver ):
     while not coord.should_stop ():
 
         sess = tf.get_default_session ()

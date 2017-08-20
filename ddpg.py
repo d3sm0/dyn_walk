@@ -15,10 +15,11 @@ class Actor ( object ):
 
         self.params = tf.get_collection ( tf.GraphKeys.GLOBAL_VARIABLES , scope=tf.get_variable_scope ().name )
 
-        grads = tf.gradients ( self.mu_hat , self.params , -self.grads )
+        self.actor_grads = tf.gradients ( self.mu_hat , self.params , -self.grads )
 
-        self.train = tf.train.AdamOptimizer ( learning_rate=lr ).apply_gradients ( zip ( grads , self.params ) ,
-                                                                                   global_step=tf.contrib.framework.get_global_step () )
+        #
+        # self.train = tf.train.AdamOptimizer ( learning_rate=lr ).apply_gradients ( zip ( grads , self.params ) ,
+        #                                                                            global_step=tf.contrib.framework.get_global_step () )
 
     def build_network(self , h_size , action_space , action_bound, act, stochastic):
 
@@ -61,9 +62,11 @@ class Critic ( object ):
 
         self.critic_loss = tf.reduce_mean ( tf.squared_difference ( self.q , self.q_hat ) , name='critic_loss' )
 
-        self.train = tf.train.AdamOptimizer ( learning_rate=lr ).minimize ( self.critic_loss ,
-                                                                            global_step=tf.contrib.framework.get_global_step () )
+        # self.train = tf.train.AdamOptimizer ( learning_rate=lr ).minimize ( self.critic_loss ,
+        #                                                                     global_step=tf.contrib.framework.get_global_step () )
+        #
 
+        self.critic_grads = tf.gradients ( self.critic_loss , self.params )
         self.action_grads = tf.gradients ( self.q_hat , self.action )
 
     def build_network(self , h_size , action_space, act):

@@ -10,7 +10,7 @@ from replay_buffer import ReplayBuffer
 # def train_op(global_vars , gradients , optim=tf.train.RMSPropOptimizer ( 0.0001 ) , max_clip=40.0):
 #     grads_clipped , _ = tf.clip_by_global_norm ( gradients , max_clip )
 #     return optim.apply_gradients ( list ( zip ( grads_clipped , global_vars ) ) ,
-#                                    global_step=tf.contrib.framework.get_global_step () )
+#                                    global_step= )
 
 
 class Agent ( object ):
@@ -27,8 +27,14 @@ class Agent ( object ):
 
         if name != 'target':
             # reverse this, from global to local
-            self.sync_op = [ self.update_target ( self.actor.params , target.actor.params ) ,
-                             self.update_target ( self.critic.params , target.critic.params ) ]
+            # self.sync_op = [ self.update_target ( self.actor.params , target.actor.params ) ,
+            #                  self.update_target ( self.critic.params , target.critic.params ) ]
+
+            self.sync_op = [ self.update_target ( target.actor.params , self.actor.params ) ,
+                             self.update_target ( target.critic.params , self.critic.params ) ]
+
+            self.train_op = self.global_trainer ( (self.actor.actor_grads + self.critic.critic_grads) ,
+                                                  target.critic.params )
 
             self.summary_ops = build_summaries ( scalar=[ self.critic.q , self.critic.critic_loss ] ,
                                                  hist=[ self.critic.state , self.critic.action ,
@@ -58,26 +64,24 @@ class Agent ( object ):
         sess = tf.get_default_session ()
         sess.run ( self.sync_op )
 
-    def train(self , state , action , q , get_summary=False):
+    def train(self , state , action , q , get_summary=None):
 
         sess = tf.get_default_session ()
 
-        critic_loss , _ , global_step = sess.run (
-            [ self.critic.critic_loss , self.critic.train , tf.contrib.framework.get_global_step () ] , feed_dict={
+        global_step , critic_loss = sess.run (
+            [ tf.contrib.framework.get_global_step () , self.critic.critic_loss ] ,
+            feed_dict={
                 self.critic.state: state ,
                 self.critic.action: action ,
                 self.critic.q: q
             } )
 
-        # compute sample of the gradient
-
-        sampled_action = self.get_action ( state )
+        sampled_action = self.get_action ( state , )
         sampled_grads = self.get_grads ( state , sampled_action )
 
-        _ , = sess.run ( [ self.actor.train ] , feed_dict={
-            self.actor.state: state ,
-            self.actor.grads: sampled_grads
-        } )
+        _ = sess.run ( self.train_op , feed_dict={self.actor.state: state , self.actor.grads: sampled_grads ,
+                                                  self.critic.state: state ,
+                                                  self.critic.action: action , self.critic.q: q} )
 
         if get_summary:
             feed_dict = {
@@ -90,6 +94,41 @@ class Agent ( object ):
             self.summarize ( feed_dict , global_step )
 
         return critic_loss
+
+
+#
+    # def train(self , state , action , q , get_summary=False):
+    #
+    #     sess = tf.get_default_session ()
+    #
+    #     critic_loss , _ , global_step = sess.run (
+    #         [ self.critic.critic_loss , self.critic.train , tf.contrib.framework.get_global_step () ] , feed_dict={
+    #             self.critic.state: state ,
+    #             self.critic.action: action ,
+    #             self.critic.q: q
+    #         } )
+    #
+    #     # compute sample of the gradient
+    #
+    #     sampled_action = self.get_action ( state )
+    #     sampled_grads = self.get_grads ( state , sampled_action )
+    #
+    #     _ , = sess.run ( [ self.actor.train ] , feed_dict={
+    #         self.actor.state: state ,
+    #         self.actor.grads: sampled_grads
+    #     } )
+    #
+    #     if get_summary:
+    #         feed_dict = {
+    #             self.actor.state: state ,
+    #             self.actor.grads: sampled_grads ,
+    #             self.critic.state: state ,
+    #             self.critic.action: action ,
+    #             self.critic.q: q
+    #         }
+    #         self.summarize ( feed_dict , global_step )
+    #
+    #     return critic_loss
 
     def get_grads(self , state , action):
         sess = tf.get_default_session ()
@@ -142,10 +181,17 @@ class Agent ( object ):
 
     @staticmethod
     # tau = 0.001
-    def update_target(local , target , tau=0.01):
+    def update_target(local , target , tau=1):
         params = [ ]
         for i in range ( len ( target ) ):
             params.append (
                 target[ i ].assign ( tf.multiply ( local[ i ] , tau ) + tf.multiply ( target[ i ] , 1. - tau ) ) )
 
         return params
+
+    @staticmethod
+    def global_trainer(grads , params):
+        grads = [ grad for grad in grads if grad is not None ]
+        grads,_ = tf.clip_by_global_norm(grads, 40)
+        train_op = tf.train.AdamOptimizer ().apply_gradients ( zip ( grads , params ), global_step=tf.contrib.framework.get_global_step ())
+        return train_op
