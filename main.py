@@ -7,6 +7,8 @@ from train import Worker
 import os
 import time
 
+# from r_agent import Agent
+
 from agent import Agent
 
 from datetime import datetime
@@ -31,7 +33,7 @@ ENV_NAME = 'Walker2d-v1'
 
 MEMORY_SIZE = 10e3 #10e6
 BATCH_SIZE = 64 # 64
-H_SIZE = [256,128] # [400, 300] in the orginal paper
+H_SIZE = [256, 128] # [400, 300] in the orginal paper
 GAMMA = 0.99
 NUM_EP = 10000
 SAVE_EVERY = 1800
@@ -107,6 +109,7 @@ def cont_save(save_every , agent , coord , saver ):
         state = env.reset ()
         t , rewards = 0 , 0
         terminal = False
+        # f_in = agent.reset()
 
         while not terminal:
             env.render ()
@@ -114,6 +117,7 @@ def cont_save(save_every , agent , coord , saver ):
             state , reward , terminal , _ = env.step ( action )
             rewards += reward
             t += 1
+
             if terminal:
                 break
         env.render ( close=True )
