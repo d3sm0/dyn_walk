@@ -35,7 +35,7 @@ def main():
 
     # env = RunEnv( visualize=False )
     # 5 is the number of velocities for head and other parts
-    env_dims = (env.observation_space.shape[ 0 ] + 5 , env.action_space.shape[ 0 ] , (env.action_space.low, env.action_space.high))
+    env_dims = (env.observation_space.shape[ 0 ], env.action_space.shape[ 0 ] , (env.action_space.low, env.action_space.high))
     ou = OUNoise( action_dimension=env_dims[ 1 ] )
 
     # tf.reset_default_graph ()
@@ -88,7 +88,7 @@ def main():
         for ep in range( NUM_EP ):
 
             agent.sync()
-            state = env.reset(difficulty=np.random.randint(2))
+            state = env.reset()
             ou.reset()
 
             terminal = False
