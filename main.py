@@ -74,12 +74,11 @@ def main():
     #   do stuff
     # after a while restart process
     """
-
-    for i in range(CPU_CORE):
-        agent = Agent('worker_{}'.format(i), env_dim=env_dims, target=target, h_size=H_SIZE, writer=writer,
-                      stochastic=True)
-        env = gym.make(ENV_NAME)
-        workers.append(Worker(env=env, agent=agent))
+    NR_WORKERS = 1000
+    for i in range(NR_WORKERS):
+        agent = Agent('worker_{}'.format(i), env_dim=env_dims, target=target,
+                      h_size=H_SIZE, writer=writer, stochastic=True)
+        workers.append(Worker(agent=agent))
 
     with tf.Session() as sess:
         global_step = tf.Variable(0, trainable=False, name='global_step')
@@ -89,14 +88,11 @@ def main():
             tf.logging.info('Loading ckpt{}'.format(ckpt))
             saver.restore(sess, ckpt)
 
-        for worker in workers:
-            process = multiprocessing.Process(target=worker.run, kwargs={
-                'sess': sess,
-                'coord': coord,
-            })
-            process.daemon = True
-            process.start()
-            processes.append(process)
+        def run_worker(worker, sess, coord):
+            worker.run(sess=sess, coord=coord)
+
+        with multiprocessing.Pool(processes=CPU_CORE) as pool:
+            pool.map(run_worker, zip(workers, NR_WORKERS*[sess], NR_WORKERS*[coord]))
 
         save_th = th.Thread(target=cont_save(SAVE_EVERY, target, coord, saver, writer))
         save_th.start()

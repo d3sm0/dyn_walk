@@ -6,9 +6,9 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Worker(object):
-    def __init__(self, env, agent, max_steps=None, batch_size=64, gamma=0.99):
+    def __init__(self, agent, max_steps=None, batch_size=64, gamma=0.99):
         self.agent = agent
-        self.env = env
+        self.env = None
         # self.ou = OUNoise ( action_dimension=agent.act_space )
         self.t = 0
         self.max_steps = max_steps
@@ -16,6 +16,7 @@ class Worker(object):
         self.gamma = gamma
 
     def run(self, sess, coord):
+        self.env = gym.make(ENV_NAME)
         last_t = 0
         summarize = False
         with sess.as_default(), sess.graph.as_default():
