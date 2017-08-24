@@ -15,32 +15,41 @@ from replay_buffer import ReplayBuffer
 
 class Agent(object):
     def __init__(self, name, env_dim, target=None, writer=None, h_size=128, memory_size=10e6, stochastic=False):
-
-        obs_space, act_space, bound = env_dim
-        with tf.variable_scope(name):
-            self.actor = Actor(obs_space, act_space, bound, h_size=h_size, stochastic=stochastic)
-            self.critic = Critic(obs_space, act_space, h_size=h_size)
-
-        # TODO Use share memory between worker
-        # TODO test prioritized experience replay
-        self.memory = ReplayBuffer(env_shape=env_dim, buffer_size=memory_size)
-
-        if name != 'target':
-            # reverse this, from global to local
-            self.sync_op = [self.update_target(self.actor.params, target.actor.params),
-                            self.update_target(self.critic.params, target.critic.params)]
-
-            self.summary_ops = build_summaries(scalar=[self.critic.q, self.critic.critic_loss],
-                                               hist=[self.critic.state, self.critic.action,
-                                                     self.actor.grads])
-
-            self.writer = writer
-
+        self.target = target
+        self.env_dim = env_dim
         self.name = name
         self.obs_space = env_dim[0]
         self.act_space = env_dim[1]
+        self.bound = env_dim[2]
         self.h_size = h_size
+        self.stochastic = stochastic
+        self.memory_size = memory_size
+        self.writer = writer
 
+        self.actor = None
+        self.critic = None
+        self.memory = None
+
+    def initialize(self):
+        # forbid reinitialization
+        assert not self.memory
+
+        if self.name != 'target':
+            # reverse this, from global to local
+            self.sync_op = [self.update_target(self.actor.params, self.target.actor.params),
+                            self.update_target(self.critic.params, self.target.critic.params)]
+
+            self.summary_ops = build_summaries(scalar=[self.critic.q, self.critic.critic_loss],
+                                               hist=[self.critic.state, self.critic.action, self.actor.grads])
+
+        with tf.variable_scope(self.name):
+            self.actor = Actor(self.obs_space, self.act_space, self.bound, h_size=self.h_size,
+                               stochastic=self.stochastic)
+            self.critic = Critic(self.obs_space, self.act_space, h_size=self.h_size)
+
+        # TODO Use share memory between worker
+        # TODO test prioritized experience replay
+        self.memory = ReplayBuffer(env_shape=self.env_dim, buffer_size=self.memory_size)
         tf.logging.info('Worker {} ready to go ...'.format(self.name))
 
     def summarize(self, feed_dict, global_step):

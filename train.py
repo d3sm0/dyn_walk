@@ -1,4 +1,5 @@
 import tensorflow as tf
+import gym
 
 from ou_noise import OUNoise
 
@@ -6,8 +7,9 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Worker(object):
-    def __init__(self, agent, max_steps=None, batch_size=64, gamma=0.99):
+    def __init__(self, env_name, agent, max_steps=None, batch_size=64, gamma=0.99):
         self.agent = agent
+        self.env_name = env_name
         self.env = None
         # self.ou = OUNoise ( action_dimension=agent.act_space )
         self.t = 0
@@ -15,14 +17,14 @@ class Worker(object):
         self.batch_size = batch_size
         self.gamma = gamma
 
-    def run(self, sess, coord):
-        self.env = gym.make(ENV_NAME)
+    def run(self, sess, stop_training_event):
+        self.agent.init()
+        self.env = gym.make(self.env_name)
         last_t = 0
         summarize = False
         with sess.as_default(), sess.graph.as_default():
             try:
-                while not coord.should_stop():
-
+                while not stop_training_event.is_set():
                     self.agent.sync()
                     self.state = self.env.reset()
                     # self.noise = self.ou.reset()
@@ -39,7 +41,7 @@ class Worker(object):
 
                     if self.max_steps is not None and self.t > self.max_steps:
                         tf.logging.info('Hopefully i learnt something...test me...')
-                        coord.should_stop()
+                        stop_training_event.set()
             except tf.errors.CancelledError:
                 return
 

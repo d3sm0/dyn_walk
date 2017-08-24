@@ -1,20 +1,18 @@
-from contextlib import closing
 import multiprocessing
 import itertools
 import time
-# from osim.env import RunEnv
+from osim.env import RunEnv
 
 CPU_COUNT = multiprocessing.cpu_count()
 
 
 def spawn_process(pid):
-    print("spawned +", pid)
-    # env = RunEnv(visualize=False)
-    # _ = env.reset(difficulty=0)
-    for i in range(4):
-        time.sleep(1)
-        # observation, reward, done, info = env.step(env.action_space.sample())
-    print("ded -", pid)
+    print("init", pid)
+    env = RunEnv(visualize=False)
+    _ = env.reset(difficulty=0)
+    for i in range(200):
+        observation, reward, done, info = env.step(env.action_space.sample())
+    print("ded", pid)
 
 
 def test_processes():
@@ -37,14 +35,10 @@ def test_processes():
 
 
 def test_pool():
-    with multiprocessing.Pool(processes=2) as pool:
+    NR_ENVIRONMENTS = 30
+    with multiprocessing.Pool(CPU_COUNT) as pool:
         start = time.time()
-        _ = pool.map(spawn_process, range(20))
-
-    # with multiprocessing.Pool(CPU_COUNT) as pool:
-    #     start = time.time()
-    #     _ = pool.map(spawn_process, range(20))
-
+        _ = pool.map(spawn_process, range(NR_ENVIRONMENTS))
     stop = time.time()
     elapsed = stop - start
     aps = (CPU_COUNT * 200) / elapsed
