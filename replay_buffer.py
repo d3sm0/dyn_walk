@@ -6,14 +6,15 @@ import heapq
 
 
 class ReplayBuffer(object):
-    def __init__(self, env_shape, buffer_size=2000, random_seed=123):
+    def __init__(self, env_shape, buffer_size=1000, random_seed=123):
         """
         The right side of the deque contains the most recent experiences
         """
         self.buffer_size = buffer_size
-        #self.count = 0
+        # self.count = 0
         self.buffer = []
-        heapq.heapify(self.buffer)
+        self.entry = {}
+        # heapq.heapify(self.buffer)
         random.seed(random_seed)
         self.env_shape = env_shape
         self.c = 0
@@ -28,78 +29,67 @@ class ReplayBuffer(object):
 
         entry = (s, a, r, s1, t)
         priority = 1
-        self.c += 1
-        # in theory break heap but we rebuild when update
-        self.buffer.append((priority, self.c, entry))
-        print(len(self.buffer))
+        res = [priority, self.c]
+        self.entry[res[1]] = entry
 
-    # def add(self, exp):
-    #
-    #     if self.count < self.buffer_size:
-    #         self.buffer.append(exp)
-    #         self.count += 1
-    #     else:
-    #         self.buffer.popleft()
-    #         self.buffer.append(exp)
+        # in theory break heap but we rebuild when update
+        if self.c == 0:
+            self.buffer.append(res)
+            self.buffer = np.array(self.buffer)
+
+        self.c += 1
+        res = np.reshape(res, newshape=(1, 2))
+        #print(self.buffer.shape)
+        #print(len(self.entry))
+        self.buffer = np.concatenate((self.buffer, res), axis=0)
 
     def get_size(self):
-        return len(self.buffer)
+        return self.buffer.shape[0]
 
+    def update(self, error, ix):
+        '''
+        update
+        '''
 
-    def update(self, error, sample):
+        size = int(self.buffer_size) + 1
+        tot = sum(self.buffer[:, 0])
 
-        print(len(self.buffer))
+        self.buffer[ix, 0] = error
+        self.buffer[:, 0] = self.buffer[:, 0] / tot
+        self.buffer = self.buffer[self.buffer[:, 0].argsort()]
 
-        size = int(self.buffer_size)
+        old_exp_ix = self.buffer[size:, 1]
+        self.buffer = self.buffer[:size]
 
-        values = sorted(self.buffer, reverse=True, key = lambda u:u[0])[:size]
-
-        priority = list(map(lambda x: x[0], values))
-        entry = list(map(lambda x: x[2], values))
-
-        priority.extend(error)
-        priority = np.array(priority)
-        priority = priority / sum(priority)
-
-        entry.extend(sample)
-
-        count = [i for i in range(len(entry))]
-        if self.c < len(count):
-            self.c = len(count) + 1
-        else:
-            self.c += 1
-
-        self.buffer = []
-        heapq.heapify(self.buffer)
-        for i in range(len(entry)):
-            self.buffer.append((priority[i], count[i], entry[i]))
-
+        for k in old_exp_ix:
+            del self.entry[k]
 
     def get_sample(self, batch_size):
 
-        '''
-        wrong
-        '''
-
-        priority = list(map(lambda x: x[0], self.buffer))
-        priority = np.array(priority)
+        priority = self.buffer[:, 0]
         priority = priority / sum(priority)
-        entry = list((map(lambda x: x[2], self.buffer)))
 
-        if len(entry) < batch_size:
-            ix = np.random.choice(a=len(entry), size=len(entry), replace=True, p=priority)
+        n = len(priority)
+
+        if n <= batch_size:
+            ix = np.random.choice(a=n, size=n, replace=True, p=priority)
         else:
-            ix = np.random.choice(a=len(entry), size=batch_size, replace=True, p=priority)
+            ix = np.random.choice(a=n, size=batch_size, replace=True, p=priority)
 
-        batch = [i for i in entry if i in ix]
-        print(len(batch))
-        s1_batch = np.vstack(list(map(lambda x: x[0], batch)))
-        a_batch = np.vstack(np.array(list(map(lambda x: x[1], batch))))
-        r_batch = np.vstack(np.array(list(map(lambda x: x[2], batch))))
-        s2_batch = np.vstack(np.array(list(map(lambda x: x[3], batch))))
-        t_batch = np.vstack(np.array(list(map(lambda x: x[4], batch))))
+        ref = self.buffer[ix, 1]
+        batch = [self.entry[i] for i in ref]
+        batch = np.array(batch)
 
-        return s1_batch, a_batch, r_batch, s2_batch, t_batch
+        s1_batch = np.stack(batch[:, 0], axis=0)  # np.vstack(list(map(lambda x: x[0], batch)))
+        s1_batch = np.reshape(s1_batch, (-1, self.env_shape[0]))
+        a_batch = np.stack(batch[:, 1], axis=0)  # np.vstack(np.array(list(map(lambda x: x[1], batch))))
+        a_batch = np.reshape(a_batch, (-1, self.env_shape[1]))
+        r_batch = np.stack(batch[:, 2])  # np.vstack(np.array(list(map(lambda x: x[2], batch))))
+        s2_batch = np.stack(batch[:, 3], axis=0)  # np.vstack(np.array(list(map(lambda x: x[3], batch))))
+        s2_batch = np.reshape(s2_batch, (-1, self.env_shape[0]))
+        t_batch = np.stack(batch[:, 4])  # np.vstack(np.array(list(map(lambda x: x[4], batch))))
+
+        return [s1_batch, a_batch, r_batch, s2_batch, t_batch, ix]
 
     def clear(self):
         self.buffer.clear()

@@ -17,7 +17,7 @@ tf.logging.set_verbosity( tf.logging.INFO )
 
 ENV_NAME = 'Walker2d-v1'
 
-MEMORY_SIZE = 1e6
+MEMORY_SIZE = 10000
 BATCH_SIZE = 32
 GAMMA = 0.99
 NUM_EP = 5000
@@ -40,9 +40,10 @@ def main():
 
     # tf.reset_default_graph ()
 
-    target = Agent( name='target' , env_dim=env_dims , h_size=H_SIZE , stochastic=IS_STOCHASTIC )
+    target = Agent( name='target' , env_dim=env_dims , h_size=H_SIZE, memory_size=MEMORY_SIZE,stochastic=IS_STOCHASTIC )
 
     global_step = tf.Variable( 0 , trainable=False , name='global_step' )
+
     writer = tf.summary.FileWriter( full_path )
     saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES , scope='target' ) , max_to_keep=2 )
     ckpt = tf.train.latest_checkpoint( full_path )
