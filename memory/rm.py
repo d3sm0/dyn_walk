@@ -2,28 +2,30 @@ from collections import deque
 import random
 import numpy as np
 
-class ReplayBuffer ( object ):
-    def __init__(self , env_shape , buffer_size , random_seed=123):
+class Experience ( object ):
+    def __init__(self , buffer_size ,batch_size):
         """
         The right side of the deque contains the most recent experiences
         """
         self.buffer_size = buffer_size
         self.count = 0
         self.buffer = deque ()
-        random.seed ( random_seed )
-        self.env_shape = env_shape
+        self.batch_size = batch_size
 
-    def collect(self , s , a , r , s1 , t):
+        # random.seed ( random_seed )
+
+
+    def add(self , s , a , r , s1 , t):
 
         # collecting trajectory
-        s = np.reshape ( s , (-1 , self.env_shape[ 0 ]) )
-        a = np.reshape ( a , (-1 , self.env_shape[ 1 ]) )
-        s1 = np.reshape ( s1 , (-1 , self.env_shape[ 0 ]) )
+        s = np.reshape ( s , (1 , -1))
+        a = np.reshape ( a , (1,-1))
+        s1 = np.reshape ( s1 , (1,-1))
         
-        self.add ( (s , a , r , s1 , t) )
+        self.collect ( (s , a , r , s1 , t) )
 
 
-    def add(self , exp):
+    def collect(self , exp):
 
         if self.count < self.buffer_size:
             self.buffer.append ( exp )
@@ -35,12 +37,12 @@ class ReplayBuffer ( object ):
     def get_size(self):
         return self.count
 
-    def get_sample(self , batch_size):
+    def select(self ):
 
-        if self.count < batch_size:
+        if self.count < self.batch_size:
             batch = random.sample ( self.buffer , self.count )
         else:
-            batch = random.sample ( self.buffer , batch_size )
+            batch = random.sample ( self.buffer , self.batch_size )
 
         batch = np.array ( batch )
         s1_batch = np.vstack ( batch[ : , 0 ] )
