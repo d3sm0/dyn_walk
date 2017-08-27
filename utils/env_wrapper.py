@@ -3,7 +3,7 @@ import numpy as np
 # TODO rewrite observation management using FIFO or queue
 class EnvWrapper( object ):
     def __init__(self , Env , visualize=False , frame_rate=50 , concat=3 , augment_rw=False , normalize=True ,
-                 add_acceleration=5 , add_time=True):
+                 add_acceleration=7 , add_time=True):
         self.env = Env( visualize=visualize )
         self.frame_rate = frame_rate
         self.observation_space = self.env.observation_space.shape[ 0 ] * concat + (add_acceleration + bool( add_time ))
@@ -62,24 +62,37 @@ class EnvWrapper( object ):
         return s , r , t , info
 
     def surr_rw(self , state , action):
+
         state = np.array( state )
-        delta_h = state[ 27 ] - state[ 35 ]
-        rw = 10 * state[ 20 ] - abs( delta_h - 1.2 ) - 0.1 * np.linalg.norm( action ) - 10 * (state[ 27 ] < 0.8)
+
+        state = self.normalize_cm(state)
+
+        # stay_up
+        delta_h = (state[ 27 ] - 1. / 2 * (state[ 35 ] + state[ 33 ]))
+
+        # v_pelvis_x - fall_penalty - movement normalized wrt the height - wild actions
+        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8)  - abs( delta_h - 1. )  - 0.02 * np.linalg.norm( action )
         return np.asscalar( rw )
 
     def concat_frame(self , states):
 
-        states = np.reshape( states , (self.concat , -1) )
-        state_list = [ ]
+        # TODO redo with indexes...
 
-        state_list.append( np.append( states[ : , :38 ] , states[ : , 38: ] ) )
+        states = np.reshape( states , (self.concat , -1) )
+
+        states = np.append( np.concatenate( states[ : , :38 ] ) ,
+                               np.concatenate( states[ : , 38: ] ) )
+
+        if self.normalize:
+            states = np.reshape(states, (self.concat,-1))
+            states = np.apply_along_axis(self.normalize_cm, 1, states)
 
         if self.add_acceleration is not None:
-            state_list[ 0 ] = self.augment_state( state_list[ 0 ] , state_list[ -1 ] )
-        if self.normalize:
-            state_list = [ self.normalize_cm( state ) for state in state_list ]
+            states = states.flatten()
+            vel = self.augment_state(states[:38], states[41 * (self.concat-1) :41 * self.concat - 3])
+            states  = np.insert(arr = states, obj = 38, values= vel)
 
-        return np.array( state_list ).flatten()
+        return states
 
     def update_diff(self , reward):
 
@@ -93,17 +106,16 @@ class EnvWrapper( object ):
         s = np.array( s )
         s1 = np.array( s1 )
 
-        idxs = [ 22 , 24 , 26 , 28 , 30 ]
+        idxs = [ 22 , 24 , 26 , 28 , 30, 32, 34 ]
 
-        vel = (s1[ idxs ] - s[ idxs ]) / (100 / self.frame_rate)
+        vel = (s1[ idxs ] - s[ idxs ]) / (100. / self.frame_rate)
+        vel =  np.append(vel, self.env.istep)
 
-        s = np.insert( arr=s , obj=38 , values=vel )
-        s = np.insert( arr=s , obj=len( s ) , values=self.env.istep )
-
-        return s
+        return vel
 
     def normalize_cm(self , s):
 
+        s = np.array(s)
         # Normalize x,y relative to the torso, and computing relative positon of the center of mass
 
         torso = [ 1 , 2 , 4 , 5 ]

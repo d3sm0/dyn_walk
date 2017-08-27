@@ -49,12 +49,12 @@ class Actor( object ):
                                   scope='policy' )
 
         if policy == 'stochastic':
-            mu_hat = self.stochastic_policy( mu_hat , action_space )
+            mu_hat = self.stochastic_policy( h2, mu_hat , action_space )
 
         elif policy == 'sin':
             mu_hat = self.sin_policy( h2 , mu_hat , action_space )
 
-        action = tf.clip_by_value( mu_hat , 0 , 1 , name='scaled' )
+        action = tf.clip_by_value( mu_hat , action_bound[0],action_bound[1] , name='scaled' )
 
         summarize_activation( h1 )
         summarize_activation( h2 )
@@ -72,16 +72,17 @@ class Actor( object ):
 
         return mu_hat
 
-    def stochastic_policy(self , mu_hat , action_space):
+    def stochastic_policy(self , h2, mu_hat , action_space):
 
-        # var = fully_connected( inputs=h2 , num_outputs=action_space , activation_fn=tf.nn.softplus )
-
-        var = tf.nn.softplus( tf.get_variable( 'sd' , dtype=tf.float32 , shape=(action_space ,) ) )
-        var = tf.reshape( var , (-1 , action_space) )
+        var = fully_connected( inputs=h2 , num_outputs=action_space , activation_fn=tf.nn.softplus )
+        #
+        # var = tf.nn.softplus( tf.get_variable( 'sd' , dtype=tf.float32 , shape=(action_space ,) ) )
+        # var = tf.reshape( var , (-1 , action_space) )
 
         action = mu_hat + tf.random_normal( shape=tf.shape( mu_hat ) ) * tf.sqrt( var )
         summarize_tensor( var , tag='var' )
         summarize_tensor( action , tag='sampled_action' )
+        return action
 
 
 class Critic( object ):
@@ -145,8 +146,9 @@ def build_summaries(scalar=None , hist=None):
     for v in scalar:
         tf.summary.scalar( v.name.replace( ':' , "_" ) + 'mean' , tf.reduce_mean( v ) )
 
-    for h in hist:
-        tf.summary.histogram( h.name.replace( ':' , "_" ) , h )
+    if hist is not None:
+        for h in hist:
+            tf.summary.histogram( h.name.replace( ':' , "_" ) , h )
 
     summary_ops = tf.get_collection( tf.GraphKeys.SUMMARIES , scope=tf.get_variable_scope().name )
     summary_ops = [ s for s in summary_ops if 'target' not in s.name ]
@@ -154,5 +156,5 @@ def build_summaries(scalar=None , hist=None):
     return tf.summary.merge( summary_ops )
 
 
-def lrelu(x , alpha=0.05):
-    return tf.nn.relu( x ) - alpha * tf.nn.relu( -x )
+def lrelu(x , alpha=0.05, name = None):
+    return tf.subtract(tf.nn.relu( x ), alpha * tf.nn.relu( -x ), name = name)

@@ -2,13 +2,25 @@ import tensorflow as tf
 from tensorflow.contrib.layers import fully_connected , flatten , summarize_activation , summarize_tensor
 import numpy as np
 
+from tensorflow.contrib.rnn import GRUCell
+
+# TODO test to apply gradients resulting from action prediction to update the policy
 
 def _shared_model(phi , h_size,act=tf.nn.elu):
     h1 = act( _linear( phi , h_size , 'h0' , _normalized_columns_initializer( 0.01 ) ), name = 'h1_shared')
-    # h1 = act( _linear( h1 , h_size , 'h1' , _normalized_columns_initializer( 0.01 ) ) )
+
+    h1 = tf.expand_dims(h1, [0])
+
+    cell = GRUCell( num_units=h_size/4 )
+    out, _ = tf.nn.dynamic_rnn( cell , inputs=h1 , sequence_length=[ 32 ] , time_major=False , dtype=tf.float32 )
+
+    h1 = tf.reshape( out , (-1 , h_size/4) )
+
+    h1 = _linear( h1 , h_size , 'h1' , _normalized_columns_initializer( 0.01 ))
     # summarize_activation( h0 )
-    summarize_activation( h1 )
-    return h1
+
+    # summarize_activation( h1 )
+    return  h1
 
 
 def _normalized_columns_initializer(std=1.0):
@@ -37,9 +49,11 @@ class ICM( object ):
 
         # notice that we share the hidden layer
         #         with tf.variable_scope('predictor'):
+
         phi1 = _shared_model( self.state, h_size)
         with tf.variable_scope( tf.get_variable_scope() , reuse=True ):
             phi2 = _shared_model( self.next_state, h_size)
+
         # inverse model
 
         g = tf.concat( values=[ phi1 , phi2 ] , axis=1 )
@@ -65,6 +79,8 @@ class ICM( object ):
 
         grads = tf.gradients( self.loss * batch_size , self.params )
 
+        self.fwd_grads = tf.gradients(ys = self.fwd_loss, xs = self.action)
+
         # grads,_ =tf.clip_by_global_norm(grads, 40)
         self.train_step = tf.train.AdamOptimizer( learning_rate=lr).apply_gradients( zip( grads , self.params ), global_step=tf.contrib.framework.get_global_step())
 
@@ -86,7 +102,8 @@ class ICM( object ):
         sess = tf.get_default_session()
         return sess.run( self.phi2_hat , feed_dict={self.state: state , self.action: action} )
 
-    def get_bonus(self , state , next_state , action , rwd_scale=0.5):
+    def get_bonus(self , state , next_state , action , rwd_scale=0.01):
+        # rewd scaled should be annleadd to 0 during the course of the training
         sess = tf.get_default_session()
 
         state = np.reshape(state, (1,-1))
@@ -98,6 +115,11 @@ class ICM( object ):
         bonus_rwd = loss * rwd_scale
 
         return bonus_rwd
+
+    def get_grads(self , state , next_state , action):
+
+        sess = tf.get_default_session()
+        return sess.run( self.fwd_grads , feed_dict={self.state: state , self.next_state: next_state , self.action: action} )[0 ]
 
     def train(self , state , next_state , action):
         sess = tf.get_default_session()
