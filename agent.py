@@ -7,13 +7,16 @@ from memory.pmr import Experience
 class Agent( object ):
     def __init__(self , name , env_dims , target=None , writer=None , h_size=128 , batch_size=32 , memory_size=10e6 ,
                  policy='det' ,
-                 act=tf.nn.elu , split_obs=None):
+                 act=tf.nn.elu , split_obs=None , motivation=None):
 
         self.obs_space , self.act_space , bound = env_dims
         with tf.variable_scope( name ):
             self.actor = Actor( self.obs_space , self.act_space , bound , h_size=h_size , policy=policy , act=act ,
                                 split_obs=split_obs )
             self.critic = Critic( self.obs_space , self.act_space , h_size=h_size , act=act )
+
+            if motivation is not None and name != 'target':
+                self.motivation = motivation( env_dims=env_dims , act=act )
 
         # TODO test prioritized experience replay
         # self.memory = Experience ( batch_size=batch_size, buffer_size=int(memory_size))
@@ -23,9 +26,14 @@ class Agent( object ):
             self.sync_op = [ self.update_target( self.actor.params , target.actor.params ) ,
                              self.update_target( self.critic.params , target.critic.params ) ]
 
-            self.summary_ops = build_summaries( scalar=[ self.critic.q , self.critic.critic_loss ] ,
-                                                hist=[ self.critic.state , self.critic.action ,
-                                                       self.actor.grads ] )
+            scalar = [ self.critic.q , self.critic.critic_loss ,
+                       # self.motivation.fwd_loss , self.motivation.inv_loss ,
+                       # self.motivation.loss
+                       ]
+            hist = [ self.critic.state , self.critic.action , self.actor.grads ]
+
+
+            self.summary_ops = build_summaries( scalar=scalar , hist=hist )
 
             self.writer = writer
 
@@ -50,7 +58,7 @@ class Agent( object ):
         sess = tf.get_default_session()
         sess.run( self.sync_op )
 
-    def train(self , state , action , q , get_summary=False):
+    def train(self , state , action , q , next_state=None , get_summary=False):
 
         sess = tf.get_default_session()
 
@@ -65,11 +73,20 @@ class Agent( object ):
 
         sampled_action = self.get_action( state )
         sampled_grads = self.get_grads( state , sampled_action )
+        #
+        # fwd_grads = self.motivation.get_grads(state, next_state,action)
+        #
+        # sampled_grads = np.subtract(sampled_grads, fwd_grads)
 
-        _ , = sess.run( [ self.actor.train ] , feed_dict={
+        _ , gr = sess.run( [ self.actor.train, self.actor.actor_grads], feed_dict={
             self.actor.state: state ,
             self.actor.grads: sampled_grads
         } )
+
+
+        if next_state is not None:
+            icm_loss = self.motivation.train( state , next_state , action )
+
 
         if get_summary:
             feed_dict = {
@@ -77,9 +94,16 @@ class Agent( object ):
                 self.actor.grads: sampled_grads ,
                 self.critic.state: state ,
                 self.critic.action: action ,
-                self.critic.q: q
+                self.critic.q: q,
+                # self.motivation.state:state,
+                # self.motivation.next_state:next_state,
+                # self.motivation.action:action
             }
             self.summarize( feed_dict , global_step )
+
+            #
+            # if self.motivation is not None:
+            #     self.motivation.summarize(state, next_state, action, writer = self.writer)
 
         return critic_loss
 
@@ -109,6 +133,8 @@ class Agent( object ):
             action = np.reshape( action , (-1 , self.act_space) )
 
         q_hat = sess.run( self.critic.q_hat , feed_dict={self.critic.state: state , self.critic.action: action} )
+
+        # q_hat = np.clip(q_hat, (-40,40))
         return q_hat.ravel()
 
     # def think(self, summarize):
@@ -137,14 +163,14 @@ class Agent( object ):
 
         target_action = self.target.get_action( next_state )
 
-        target_q = self.target.get_q( next_state , target_action )[0]
-        local_q = self.get_q( state , action )[0]
+        target_q = self.target.get_q( next_state , target_action )[ 0 ]
+        local_q = self.get_q( state , action )[ 0 ]
         q = reward
 
         if not terminal:
             q += self.gamma * target_q
 
-        return np.abs( q - local_q ), q
+        return np.abs( q - local_q ) , q
 
     def think(self , summarize):
 
