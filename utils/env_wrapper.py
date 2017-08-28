@@ -31,7 +31,6 @@ class EnvWrapper( object ):
 
     def step(self , action):
 
-
         states = [ self.env.get_observation() ]
 
         reward = 0
@@ -47,6 +46,7 @@ class EnvWrapper( object ):
         self.r += reward
 
         if self.augment_rw:
+
             reward += self.surr_rw( state , action )
 
         return self.concat_frame( states ) , reward , terminal , info
@@ -68,7 +68,7 @@ class EnvWrapper( object ):
         state = self.normalize_cm(state)
 
         # stay_up
-        delta_h = (state[ 27 ] - 1. / 2 * (state[ 35 ] + state[ 33 ]))
+        delta_h = (state[ 27 ] - .5 * (state[ 35 ] + state[ 33 ]))
 
         # v_pelvis_x - fall_penalty - movement normalized wrt the height - wild actions
         rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8)  - abs( delta_h - 1. )  - 0.02 * np.linalg.norm( action )
@@ -110,6 +110,7 @@ class EnvWrapper( object ):
 
         vel = (s1[ idxs ] - s[ idxs ]) / (100. / self.frame_rate)
         vel =  np.append(vel, self.env.istep)
+
 
         return vel
 

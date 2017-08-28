@@ -12,8 +12,6 @@ class Experience ( object ):
         self.buffer = deque ()
         self.batch_size = batch_size
 
-        # random.seed ( random_seed )
-
 
     def add(self , s , a , r , s1 , t):
 
