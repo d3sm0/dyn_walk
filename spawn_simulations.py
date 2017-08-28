@@ -7,12 +7,10 @@ CPU_COUNT = multiprocessing.cpu_count()
 
 
 def spawn_process(pid):
-    print("init", pid)
     env = RunEnv(visualize=False)
     _ = env.reset(difficulty=0)
     for i in range(200):
         observation, reward, done, info = env.step(env.action_space.sample())
-    print("ded", pid)
 
 
 def test_processes():
