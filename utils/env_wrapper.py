@@ -1,9 +1,13 @@
 import numpy as np
 
+import gym
 # TODO rewrite observation management using FIFO or queue
+
+
 class EnvWrapper( object ):
     def __init__(self , Env , visualize=False , frame_rate=50 , concat=3 , augment_rw=False , normalize=True ,
                  add_acceleration=7 , add_time=True):
+
         self.env = Env( visualize=visualize )
         self.frame_rate = frame_rate
         self.observation_space = self.env.observation_space.shape[ 0 ] * concat + (add_acceleration + bool( add_time ))
@@ -16,6 +20,7 @@ class EnvWrapper( object ):
         self.augment_rw = augment_rw
         self.add_acceleration = add_acceleration
         self.normalize = normalize
+
 
     def get_dims(self):
         return (self.observation_space , self.action_space , self.bound)
@@ -71,7 +76,7 @@ class EnvWrapper( object ):
         delta_h = (state[ 27 ] - .5 * (state[ 35 ] + state[ 33 ]))
 
         # v_pelvis_x - fall_penalty - movement normalized wrt the height - wild actions
-        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8)  - abs( delta_h - 1. )  - 0.02 * np.linalg.norm( action )
+        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8)  - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
         return np.asscalar( rw )
 
     def concat_frame(self , states):
@@ -109,7 +114,7 @@ class EnvWrapper( object ):
         idxs = [ 22 , 24 , 26 , 28 , 30, 32, 34 ]
 
         vel = (s1[ idxs ] - s[ idxs ]) / (100. / self.frame_rate)
-        vel =  np.append(vel, self.env.istep)
+        # vel =  np.append(vel, self.env.istep)
 
 
         return vel
