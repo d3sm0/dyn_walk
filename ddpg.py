@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib.layers import fully_connected , summarize_activation , summarize_tensor
 
-
 class Actor( object ):
     def __init__(self , obs_space , action_space , action_bound , h_size , lr=1e-4 , act=tf.nn.relu , policy='det' ,
                  split_obs=None):

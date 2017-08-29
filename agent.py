@@ -7,7 +7,7 @@ from memory.pmr import Experience
 class Agent( object ):
     def __init__(self , name , env_dims , target=None , writer=None , h_size=128 , batch_size=32 , memory_size=10e6 ,
                  policy='det' ,
-                 act=tf.nn.elu , split_obs=None):
+                 act=tf.nn.elu , split_obs=None ,  clip = 20):
 
         self.obs_space , self.act_space , bound = env_dims
         with tf.variable_scope( name ):
@@ -23,15 +23,18 @@ class Agent( object ):
             self.sync_op = [ self.update_target( self.actor.params , target.actor.params ) ,
                              self.update_target( self.critic.params , target.critic.params ) ]
 
-            self.summary_ops = build_summaries( scalar=[ self.critic.q , self.critic.critic_loss ] ,
-                                                hist=[ self.critic.state , self.critic.action ,
-                                                       self.actor.grads ] )
+            scalar = [ self.critic.q , self.critic.critic_loss ]
+            hist = [ self.critic.state , self.critic.action , self.actor.grads ]
+
+
+            self.summary_ops = build_summaries( scalar=scalar , hist=hist )
 
             self.writer = writer
 
         self.name = name
         self.target = target
         self.gamma = 0.99
+        self.clip = clip
 
         tf.logging.info( 'Worker {} ready to go ...'.format( self.name ) )
 
@@ -50,7 +53,7 @@ class Agent( object ):
         sess = tf.get_default_session()
         sess.run( self.sync_op )
 
-    def train(self , state , action , q , get_summary=False):
+    def train(self , state , action , q, get_summary=False):
 
         sess = tf.get_default_session()
 
@@ -109,29 +112,11 @@ class Agent( object ):
             action = np.reshape( action , (-1 , self.act_space) )
 
         q_hat = sess.run( self.critic.q_hat , feed_dict={self.critic.state: state , self.critic.action: action} )
+
+        if self.clip:
+            q_hat = np.clip(q_hat, -self.clip, self.clip)
+
         return q_hat.ravel()
-
-    # def think(self, summarize):
-    #
-    #     if self.memory.get_size() > self.memory.batch_size:
-    #         s1_batch , a_batch , r_batch , s2_batch , t_batch = self.memory.select ( )
-    #
-    #         target_action = self.target.get_action ( s2_batch )
-    #         target_q = self.target.get_q ( s2_batch , target_action )
-    #
-    #         y_i = [ ]
-    #
-    #         for k in range ( self.memory.batch_size ):
-    #             if t_batch[ k ]:
-    #                 y_i.append ( r_batch[ k ] )
-    #             else:
-    #                 y_i.append ( r_batch[ k ] + self.gamma * target_q[ k ] )
-    #
-    #         y_i = np.reshape ( y_i , (self.memory.batch_size , 1) )
-    #
-    #         c_loss = self.train ( s1_batch , a_batch , y_i , get_summary=summarize )
-
-
 
     def get_td(self , state , action , reward , next_state , terminal):
 
