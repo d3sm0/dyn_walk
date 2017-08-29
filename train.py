@@ -81,8 +81,6 @@ def main():
 
     global_step = tf.Variable( 0 , trainable=False , name='global_step' )
     writer = tf.summary.FileWriter( full_path )
-    saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
-    ckpt = tf.train.latest_checkpoint( full_path )
 
     with open( os.path.join( full_path , 'readme.md' ) , 'w+' ) as f:
         f.write( DESCRIPTON )
@@ -91,9 +89,13 @@ def main():
                     split_obs=split_obs , clip=CLIP )
 
     agent = Agent( name='local' , env_dims=env_dims , target=target , writer=writer , h_size=H_SIZE ,
-                   policy=POLICY , act=ACTIVATION , split_obs=split_obs , motivation=MOTIVATION , clip=CLIP )
+                   policy=POLICY , act=ACTIVATION , split_obs=split_obs , clip=CLIP )
+
+    saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
+    ckpt = tf.train.latest_checkpoint( full_path )
 
     daddy = Daddy( target=agent , env_dim=env_dims )
+
 
     with tf.Session() as sess:
 
@@ -122,9 +124,6 @@ def main():
 
             # terminal = False
             timesteps , tot_rw , tot_q , tot_td = 0 , 0 , 0 , 0
-            #
-            # z_filter = ZFilter( env_dims[0])
-            # state = z_filter( state )
 
             bonus = 0
 

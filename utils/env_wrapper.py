@@ -1,12 +1,12 @@
 import numpy as np
+from utils.running_stats import ZFilter
 
-import gym
 # TODO rewrite observation management using FIFO or queue
 
 
 class EnvWrapper( object ):
     def __init__(self , Env , visualize=False , frame_rate=50 , concat=3 , augment_rw=False , normalize=True ,
-                 add_acceleration=7 , add_time=True):
+                 add_acceleration=7 , add_time=False, z_filter = None):
 
         self.env = Env( visualize=visualize )
         self.frame_rate = frame_rate
@@ -20,7 +20,7 @@ class EnvWrapper( object ):
         self.augment_rw = augment_rw
         self.add_acceleration = add_acceleration
         self.normalize = normalize
-
+        self.z_filter = ZFilter(self.observation_space)
 
     def get_dims(self):
         return (self.observation_space , self.action_space , self.bound)
@@ -44,14 +44,13 @@ class EnvWrapper( object ):
             states.append( state )
             reward += r
 
-            if terminal and len(states) < self.concat:
+            if terminal and len( states ) < self.concat:
                 states.append( states[ -1 ] )
                 break
 
         self.r += reward
 
         if self.augment_rw:
-
             reward += self.surr_rw( state , action )
 
         return self.concat_frame( states ) , reward , terminal , info
@@ -70,13 +69,13 @@ class EnvWrapper( object ):
 
         state = np.array( state )
 
-        state = self.normalize_cm(state)
+        state = self.normalize_cm( state )
 
         # stay_up
         delta_h = (state[ 27 ] - .5 * (state[ 35 ] + state[ 33 ]))
 
         # v_pelvis_x - fall_penalty - movement normalized wrt the height - wild actions
-        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8)  - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
+        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8) - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
         return np.asscalar( rw )
 
     def concat_frame(self , states):
@@ -86,16 +85,19 @@ class EnvWrapper( object ):
         states = np.reshape( states , (self.concat , -1) )
 
         states = np.append( np.concatenate( states[ : , :38 ] ) ,
-                               np.concatenate( states[ : , 38: ] ) )
+                            np.concatenate( states[ : , 38: ] ) )
 
         if self.normalize:
-            states = np.reshape(states, (self.concat,-1))
-            states = np.apply_along_axis(self.normalize_cm, 1, states)
+            states = np.reshape( states , (self.concat , -1) )
+            states = np.apply_along_axis( self.normalize_cm , 1 , states )
 
         if self.add_acceleration is not None:
             states = states.flatten()
-            vel = self.augment_state(states[:38], states[41 * (self.concat-1) :41 * self.concat - 3])
-            states  = np.insert(arr = states, obj = 38, values= vel)
+            vel = self.augment_state( states[ :38 ] , states[ 41 * (self.concat - 1):41 * self.concat - 3 ] )
+            states = np.insert( arr=states , obj=38 , values=vel )
+
+        if self.z_filter is not None:
+            states = self.z_filter(states)
 
         return states
 
@@ -111,17 +113,16 @@ class EnvWrapper( object ):
         s = np.array( s )
         s1 = np.array( s1 )
 
-        idxs = [ 22 , 24 , 26 , 28 , 30, 32, 34 ]
+        idxs = [ 22 , 24 , 26 , 28 , 30 , 32 , 34 ]
 
         vel = (s1[ idxs ] - s[ idxs ]) / (100. / self.frame_rate)
         # vel =  np.append(vel, self.env.istep)
-
 
         return vel
 
     def normalize_cm(self , s):
 
-        s = np.array(s)
+        s = np.array( s )
         # Normalize x,y relative to the torso, and computing relative positon of the center of mass
 
         torso = [ 1 , 2 , 4 , 5 ]
