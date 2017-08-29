@@ -35,12 +35,12 @@ CONCATENATE_FRAMES = 3
 USE_RW = True
 MOTIVATION = None
 CLIP = 20
-LOAD_FROM = 'Aug-28_22_29'  # 'Aug-27_18_06'
-# FRAME_RATE  = 25 # pick 1/4
+LOAD_FROM = None # 'Aug-28_22_29'  # 'Aug-27_18_06'
+FRAME_RATE  = 25 # pick 1/4
 NORMALIZE = True # Recenter wrt to the torso and Statistically normalization
 DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, batch normalization with running mean and variance.' \
-             'Using clipping gradients and value function. Using prioritzed memory and 128,64 as size of hidden layer. ' \
-             'Testing tanh activation function and picking 1 over 4 frames'
+             'Using clipping gradients and value function. Using prioritzed memory and 128,64 as size of hidden layer and shared first two layers' \
+             'Testing tanh activation function and picking 1 over 4 frames.'
 
 def main():
     now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir

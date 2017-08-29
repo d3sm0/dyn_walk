@@ -1,5 +1,5 @@
 import tensorflow as tf
-from ddpg import Actor , Critic , build_summaries
+from ddpg import DDPG , build_summaries
 import numpy as np
 from memory.pmr import Experience
 
@@ -7,25 +7,22 @@ from memory.pmr import Experience
 class Agent( object ):
     def __init__(self , name , env_dims , target=None , writer=None , h_size=128 , batch_size=32 , memory_size=10e6 ,
                  policy='det' ,
-                 act=tf.nn.elu , split_obs=None ,  clip = 20):
+                 act=tf.nn.elu , split_obs=None , clip=20):
 
         self.obs_space , self.act_space , bound = env_dims
         with tf.variable_scope( name ):
-            self.actor = Actor( self.obs_space , self.act_space , bound , h_size=h_size , policy=policy , act=act ,
+            self.ac = DDPG( self.obs_space , self.act_space , bound , h_size=h_size , policy=policy , act=act ,
                                 split_obs=split_obs )
-            self.critic = Critic( self.obs_space , self.act_space , h_size=h_size , act=act )
 
         # TODO test prioritized experience replay
         # self.memory = Experience ( batch_size=batch_size, buffer_size=int(memory_size))
         self.memory = Experience( batch_size=batch_size , memory_size=int( memory_size ) )
 
         if name != 'target':
-            self.sync_op = [ self.update_target( self.actor.params , target.actor.params ) ,
-                             self.update_target( self.critic.params , target.critic.params ) ]
+            self.sync_op = self.update_target( self.ac.params , target.ac.params )
 
-            scalar = [ self.critic.q , self.critic.critic_loss ]
-            hist = [ self.critic.state , self.critic.action , self.actor.grads ]
-
+            scalar = [ self.ac.q , self.ac.critic_loss ]
+            hist = [ self.ac.state , self.ac.action , self.ac.action_grads ]
 
             self.summary_ops = build_summaries( scalar=scalar , hist=hist )
 
@@ -53,34 +50,32 @@ class Agent( object ):
         sess = tf.get_default_session()
         sess.run( self.sync_op )
 
-    def train(self , state , action , q, get_summary=False):
+    def train(self , state , action , q , get_summary=False):
 
         sess = tf.get_default_session()
 
         critic_loss , _ , global_step = sess.run(
-            [ self.critic.critic_loss , self.critic.train , tf.contrib.framework.get_global_step() ] , feed_dict={
-                self.critic.state: state ,
-                self.critic.action: action ,
-                self.critic.q: q
+            [ self.ac.critic_loss , self.ac.train_critic , tf.contrib.framework.get_global_step() ] , feed_dict={
+                self.ac.state: state ,
+                self.ac.action: action ,
+                self.ac.q: q
             } )
 
         # compute sample of the gradient
 
         sampled_action = self.get_action( state )
-        sampled_grads = self.get_grads( state , sampled_action )
+        # sampled_grads = self.get_grads( state , sampled_action )
 
-        _ , = sess.run( [ self.actor.train ] , feed_dict={
-            self.actor.state: state ,
-            self.actor.grads: sampled_grads
+        _ , = sess.run( [ self.ac.train_actor ] , feed_dict={
+            self.ac.state: state ,
+            self.ac.action:sampled_action
         } )
 
         if get_summary:
             feed_dict = {
-                self.actor.state: state ,
-                self.actor.grads: sampled_grads ,
-                self.critic.state: state ,
-                self.critic.action: action ,
-                self.critic.q: q
+                self.ac.state: state ,
+                self.ac.action: action ,
+                self.ac.q: q
             }
             self.summarize( feed_dict , global_step )
 
@@ -88,9 +83,9 @@ class Agent( object ):
 
     def get_grads(self , state , action):
         sess = tf.get_default_session()
-        return sess.run( self.critic.action_grads , feed_dict={
-            self.critic.state: state ,
-            self.critic.action: action ,
+        return sess.run( self.ac.action_grads , feed_dict={
+            self.ac.state: state ,
+            self.ac.action: action ,
         } )[ 0 ]
 
     def get_action(self , state):
@@ -100,8 +95,8 @@ class Agent( object ):
         if np.ndim( state ) != self.obs_space:
             state = np.reshape( state , (-1 , self.obs_space) )
 
-        mu_hat = sess.run( self.actor.mu_hat ,
-                           feed_dict={self.actor.state: state} )
+        mu_hat = sess.run( self.ac.mu_hat ,
+                           feed_dict={self.ac.state: state} )
         return mu_hat
 
     def get_q(self , state , action):
@@ -111,10 +106,10 @@ class Agent( object ):
             state = np.reshape( state , (-1 , self.obs_space) )
             action = np.reshape( action , (-1 , self.act_space) )
 
-        q_hat = sess.run( self.critic.q_hat , feed_dict={self.critic.state: state , self.critic.action: action} )
+        q_hat = sess.run( self.ac.q_hat , feed_dict={self.ac.state: state , self.ac.action: action} )
 
         if self.clip:
-            q_hat = np.clip(q_hat, -self.clip, self.clip)
+            q_hat = np.clip( q_hat , -self.clip , self.clip )
 
         return q_hat.ravel()
 
@@ -122,14 +117,14 @@ class Agent( object ):
 
         target_action = self.target.get_action( next_state )
 
-        target_q = self.target.get_q( next_state , target_action )[0]
-        local_q = self.get_q( state , action )[0]
+        target_q = self.target.get_q( next_state , target_action )[ 0 ]
+        local_q = self.get_q( state , action )[ 0 ]
         q = reward
 
         if not terminal:
             q += self.gamma * target_q
 
-        return np.abs( q - local_q ), q
+        return np.abs( q - local_q ) , q
 
     def think(self , summarize):
 
