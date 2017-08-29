@@ -36,7 +36,7 @@ ACTIVATION = lrelu
 CONCATENATE_FRAMES = 3
 USE_RW = True
 CLIP = 20
-LOAD_FROM = None  # 'Aug-27_18_06'
+LOAD_FROM = 'Aug-29_07_34'
 NORMALIZE = True
 FRAME_RATE = 50
 DESCRIPTON = """
@@ -206,16 +206,16 @@ def main():
                 tf.logging.info( 'Model saved at ep {}'.format( gs ) )
 
 
-def eval(path , NUM_EP=1):
+def eval(path , NUM_EP=10):
     full_path = os.path.join( os.getcwd() , ENV_NAME , 'logs' , path )
-
     if ENV_NAME == 'osim':
 
         from osim.env import RunEnv
 
         try:
-            env = EnvWrapper( RunEnv , visualize=True , augment_rw=False , add_time=True , concat=CONCATENATE_FRAMES ,
-                              normalize=NORMALIZE , add_acceleration=7 )
+            env = EnvWrapper( RunEnv , visualize=True , augment_rw=USE_RW , add_time=False ,
+                              concat=CONCATENATE_FRAMES , normalize = NORMALIZE, add_acceleration=7, frame_rate=FRAME_RATE)
+            split_obs = env.split_obs
             env_dims = env.get_dims()
         except:
             tf.logging.info( 'Environment not found' )
@@ -225,11 +225,16 @@ def eval(path , NUM_EP=1):
             env = gym.make( ENV_NAME )
             env_dims = (env.observation_space.shape[ 0 ] , env.action_space.shape[ 0 ] ,
                         (env.action_space.low , env.action_space.high))
+            split_obs = None
         except:
             raise NotImplementedError
 
+
     target = Agent( name='target' , env_dims=env_dims , h_size=H_SIZE , policy=POLICY , act=ACTIVATION ,
                     split_obs=None , clip=CLIP )
+
+    agent = Agent( name='local' , env_dims=env_dims , target=target, h_size=H_SIZE ,
+                   policy=POLICY , act=ACTIVATION , split_obs=None )
 
     saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
     ckpt = tf.train.latest_checkpoint( full_path )
@@ -257,7 +262,7 @@ def eval(path , NUM_EP=1):
                 if ENV_NAME != 'osim':
                     env.render()
 
-                action = target.get_action( state ).flatten()
+                action = agent.get_action( state ).flatten()
                 next_state , reward , terminal , _ = env.step( action )
                 state = next_state
                 timesteps += 1
