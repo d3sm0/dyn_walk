@@ -35,14 +35,12 @@ POLICY = 'det'  # stochastic, sin
 ACTIVATION = lrelu
 CONCATENATE_FRAMES = 3
 USE_RW = True
-MOTIVATION = None
 CLIP = 20
 LOAD_FROM = None  # 'Aug-27_18_06'
 NORMALIZE = True
-
+FRAME_RATE = 50
 DESCRIPTON = """
-Testing Walker2d concatenating 3 frames with ICM model with with reward function and split observation. Using prioritzed memory and 128,64, and lrelu. 
-Clipping reward and value function.
+Experimenting with assisted policy. Using acceleration, localized metrics, batch normalization, clipping.
 """
 
 
@@ -51,12 +49,10 @@ def softmax(x):
     e_x = np.exp( x - np.max( x ) )
     return e_x / e_x.sum()
 
-
 def main():
     now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
 
     full_path = os.path.join( os.getcwd() , ENV_NAME , 'logs' , now )
-
 
     if ENV_NAME == 'osim':
 
@@ -64,7 +60,7 @@ def main():
 
         try:
             env = EnvWrapper( RunEnv , visualize=False , augment_rw=USE_RW , add_time=False ,
-                              concat=CONCATENATE_FRAMES , normalize=NORMALIZE , add_acceleration=7 )
+                              concat=CONCATENATE_FRAMES , normalize = NORMALIZE, add_acceleration=7, frame_rate=FRAME_RATE)
             split_obs = env.split_obs
             env_dims = env.get_dims()
         except:
@@ -86,10 +82,9 @@ def main():
         f.write( DESCRIPTON )
 
     target = Agent( name='target' , env_dims=env_dims , h_size=H_SIZE , policy=POLICY , act=ACTIVATION ,
-                    split_obs=split_obs , clip=CLIP )
-
+                    split_obs=None )
     agent = Agent( name='local' , env_dims=env_dims , target=target , writer=writer , h_size=H_SIZE ,
-                   policy=POLICY , act=ACTIVATION , split_obs=split_obs , clip=CLIP )
+                   policy=POLICY , act=ACTIVATION , split_obs=None )
 
     saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
     ckpt = tf.train.latest_checkpoint( full_path )
@@ -143,7 +138,6 @@ def main():
                     action = daddy.get_action(t)
 
                 next_state , reward , terminal , _ = env.step( action )
-                # next_state = z_filter(next_state)
 
                 td , q = agent.get_td( state , action , reward + bonus , next_state , terminal )
 
