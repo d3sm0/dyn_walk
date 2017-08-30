@@ -115,5 +115,5 @@ def build_summaries(scalar=None , hist=None):
     return tf.summary.merge( summary_ops )
 
 
-def lrelu(x , alpha=0.05 , name=None):
+def lrelu(x , alpha=0.2 , name=None):
     return tf.subtract( tf.nn.relu( x ) , alpha * tf.nn.relu( -x ) , name=name )

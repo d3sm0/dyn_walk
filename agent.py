@@ -157,7 +157,7 @@ class Agent( object ):
 
     @staticmethod
     # tau = 0.001
-    def update_target(local , target , tau=0.01):
+    def update_target(local , target , tau=0.001):
         params = [ ]
         for i in range( len( target ) ):
             params.append(
