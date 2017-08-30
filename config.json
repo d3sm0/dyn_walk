@@ -1,0 +1,16 @@
+{
+  "ENV_NAME" : "osim",
+  "MEMORY_SIZE" : 1000000,
+  "BATCH_SIZE" : 32,
+  "GAMMA" : 0.99,
+  "NUM_EP" : 5000,
+  "SAVE_EVERY" : 100,
+  "H_SIZE" : [128, 64],
+  "POLICY" : "det",
+  "ACTIVATION" : "lrelu",
+  "CONCATENATE_FRAMES" : 3,
+  "USE_RW" : true,
+  "NORMALIZE" : true,
+  "DESCRIPTON" : "Testing Walker2d concatenating 3 frames with ICM model with with reward function. Using prioritzed memory and 128,64, and lrelu.",
+  "REPORT_EVERY" : 5
+}
