@@ -35,7 +35,7 @@ CONCATENATE_FRAMES = 3
 USE_RW = True
 MOTIVATION = None
 CLIP = 20
-LOAD_FROM = None # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
+LOAD_FROM = 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
 FRAME_RATE  = 50 # pick 1/4
 NORMALIZE = True # Recenter wrt to the torso and Statistically normalization
 DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, batch normalization with running mean and variance.' \
@@ -192,13 +192,11 @@ def eval(path , NUM_EP=5):
     with tf.Session() as sess:
 
         if ckpt:
-            try:
-                tf.logging.info( 'Restore model {}'.format( ckpt ) )
-                saver.restore( sess=sess , save_path=ckpt )
-            except Exception as e:
-                return tf.logging.info( e )
+            tf.logging.info( 'Restore model {}'.format( ckpt ) )
+            saver.restore( sess=sess , save_path=ckpt )
 
-        sess.run( tf.global_variables_initializer() )
+
+        # sess.run( tf.global_variables_initializer() )
 
         for ep in range( NUM_EP ):
 
