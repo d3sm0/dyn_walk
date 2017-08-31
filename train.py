@@ -35,19 +35,21 @@ CONCATENATE_FRAMES = 3
 USE_RW = True
 MOTIVATION = None
 CLIP = 20
-LOAD_FROM = None # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
-FRAME_RATE  = 50 # pick 1/4
-NORMALIZE = True # Recenter wrt to the torso and Statistically normalization
-DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, batch normalization with running mean and variance.' \
-             'Using clipping gradients and value function. Using prioritzed memory and 128,64 as size of hidden layer and shared first two layers' \
-             'Testing tanh activation function and picking 1 over 4 frames.'
+LOAD_FROM = None  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
+FRAME_RATE = 50  # pick 1/4
+NORMALIZE = True  # Recenter wrt to the torso and Statistically normalization
+DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, ' \
+             'batch normalization with running mean and variance. Using clipping gradients and value function. ' \
+             'Using prioritzed memory. Topology [128,64] with Shared layers. ' \
+             'Lrelu act function and tanh.'
+
 
 def main():
+    # now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
+    now = 'Aug-31_00_57'
+    full_path = os.path.join( os.getcwd() , ENV_NAME , 'logs' , now )
 
-    now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
-
-    # now = 'Aug-29_12_08'
-    full_path = os.path.join( os.getcwd() , ENV_NAME,'logs' , now )
+    tf.logging.info( now )
 
     if ENV_NAME == 'osim':
 
@@ -55,7 +57,8 @@ def main():
 
         try:
             env = EnvWrapper( RunEnv , visualize=False , augment_rw=USE_RW , add_time=False ,
-                              concat=CONCATENATE_FRAMES , normalize = NORMALIZE, add_acceleration=7, frame_rate=FRAME_RATE)
+                              concat=CONCATENATE_FRAMES , normalize=NORMALIZE , add_acceleration=7 ,
+                              frame_rate=FRAME_RATE )
             split_obs = env.split_obs
             env_dims = env.get_dims()
         except:
@@ -80,23 +83,21 @@ def main():
     agent = Agent( name='local' , env_dims=env_dims , target=target , writer=writer , h_size=H_SIZE ,
                    policy=POLICY , act=ACTIVATION , split_obs=None )
 
+    saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
+
     with open( os.path.join( full_path , 'readme.md' ) , 'w+' ) as f:
         f.write( DESCRIPTON )
 
     with tf.Session() as sess:
-        #
-        # tf.logging.info( 'Restore model {}'.format( ckpt ) )
-        # saver.restore( sess=sess , save_path=ckpt )
-        #
-        # # if ckpt:
-        # #     try:
-        # #
-        # #     except Exception as e:
-        # #         tf.logging.info( e )
 
-        sess.run( tf.global_variables_initializer() )
-
-        saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
+        if ckpt:
+            try:
+                tf.logging.info( 'Restore model {}'.format( ckpt ) )
+                saver.restore( sess=sess , save_path=ckpt )
+            except Exception as e:
+                tf.logging.info( e )
+                raise Exception
+                # sess.run( tf.global_variables_initializer() )
 
         summarize = False
         ep_summary = tf.Summary()
@@ -169,7 +170,7 @@ def eval(path , NUM_EP=5):
         from osim.env import RunEnv
 
         try:
-            env = EnvWrapper( RunEnv , visualize=True , augment_rw=False , add_time=False , concat=CONCATENATE_FRAMES ,
+            env = EnvWrapper( RunEnv , visualize=True , augment_rw=True , add_time=False , concat=CONCATENATE_FRAMES ,
                               normalize=NORMALIZE , add_acceleration=7 )
             env_dims = env.get_dims()
         except:
@@ -186,17 +187,23 @@ def eval(path , NUM_EP=5):
     target = Agent( name='target' , env_dims=env_dims , h_size=H_SIZE , policy=POLICY , act=ACTIVATION ,
                     split_obs=None , clip=CLIP )
 
-    saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
-    ckpt = tf.train.latest_checkpoint( full_path )
+    agent = Agent( name='local' , env_dims=env_dims , target=target , h_size=H_SIZE ,
+                   policy=POLICY , act=ACTIVATION , split_obs=None )
 
     with tf.Session() as sess:
 
-        if ckpt:
-            tf.logging.info( 'Restore model {}'.format( ckpt ) )
-            saver.restore( sess=sess , save_path=ckpt )
-
-
         # sess.run( tf.global_variables_initializer() )
+
+        saver = tf.train.Saver( tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES ) , max_to_keep=2 )
+        ckpt = tf.train.latest_checkpoint( full_path )
+
+        if ckpt:
+            try:
+                tf.logging.info( 'Restore model {}'.format( ckpt ) )
+                saver.restore( sess=sess , save_path=ckpt )
+            except Exception as e:
+                tf.logging.info( e )
+                raise Exception
 
         for ep in range( NUM_EP ):
 
@@ -210,16 +217,17 @@ def eval(path , NUM_EP=5):
                 if ENV_NAME != 'osim':
                     env.render()
 
-                action = target.get_action( state ).flatten()
-                # print(action)
+                action = agent.get_action( state ).flatten()
+
                 next_state , reward , terminal , _ = env.step( action )
+                # print(reward)
                 state = next_state
                 timesteps += 1
                 tot_rw += reward
 
             tf.logging.info(
                 'Master ep  {}, latest avg reward {},of steps {}'.format( ep , tot_rw / timesteps , timesteps ) )
-    env.close()
+        env.close()
 
 
 if __name__ == '__main__':
