@@ -35,10 +35,10 @@ CONCATENATE_FRAMES = 3
 USE_RW = True
 MOTIVATION = None
 CLIP = 20
-LOAD_FROM = None  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
+LOAD_FROM = None # 'Aug-31_00_57'  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
 FRAME_RATE = 50  # pick 1/4
 NORMALIZE = True  # Recenter wrt to the torso and Statistically normalization
-DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, ' \
+DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, as in deep mind paper ' \
              'batch normalization with running mean and variance. Using clipping gradients and value function. ' \
              'Using prioritzed memory. Topology [128,64] with Shared layers. ' \
              'Lrelu act function and tanh.'
