@@ -1,5 +1,4 @@
 import tensorflow as tf
-
 from datetime import datetime
 import os
 import numpy as np
@@ -38,14 +37,14 @@ CLIP = 20
 LOAD_FROM = None # 'Aug-31_00_57'  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
 FRAME_RATE = 50  # pick 1/4
 NORMALIZE = True  # Recenter wrt to the torso and Statistically normalization
-DESCRIPTON = 'Testing osim concatenatig 3 frames with with augmented reward, as in deep mind paper ' \
+DESCRIPTON = 'Testing osim concatenatig 3 frames with augmented reward, as in deep mind paper ' \
              'batch normalization with running mean and variance. Using clipping gradients and value function. ' \
              'Using prioritzed memory. Topology [128,64] with Shared layers. ' \
-             'Lrelu act function and tanh.'
+             'lrelu act function and tanh.'
 
 
 def main():
-    # now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
+    #now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
     now = 'Aug-31_00_57'
     full_path = os.path.join( os.getcwd() , ENV_NAME , 'logs' , now )
 
@@ -97,7 +96,8 @@ def main():
             except Exception as e:
                 tf.logging.info( e )
                 raise Exception
-                # sess.run( tf.global_variables_initializer() )
+        else:
+            sess.run( tf.global_variables_initializer() )
 
         summarize = False
         ep_summary = tf.Summary()

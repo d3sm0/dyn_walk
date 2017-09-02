@@ -8,7 +8,7 @@ def lrelu(x , alpha=0.2 , name=None):
 
 
 class DDPG( object ):
-    def __init__(self , obs_space , action_space , action_bound , h_size , act=lrelu, policy='det' ,
+    def __init__(self , obs_space , action_space , action_bound , h_size , act=tf.nn.elu, policy='det' ,
                  split_obs=None, lr = 1e-3):
 
         self.state = tf.placeholder( 'float32' , shape=[ None , obs_space ] , name='state' )
@@ -17,7 +17,7 @@ class DDPG( object ):
 
         self.q = tf.placeholder( 'float32' , shape=[ None , 1 ] , name='q' )
 
-        h1 = self.shared_network()
+        h1 = self.shared_network(act=act)
 
         self.mu_hat = self.policy_network( h1 , bound=action_bound , action_space=action_space , act = act)
         self.q_hat = self.value_network(h1, h_size = h_size, action_space=action_space, act = act)
