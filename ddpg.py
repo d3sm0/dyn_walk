@@ -2,8 +2,13 @@ import tensorflow as tf
 from tensorflow.contrib.layers import fully_connected , summarize_activation , summarize_tensor
 
 
+
+def lrelu(x , alpha=0.2 , name=None):
+    return tf.subtract( tf.nn.relu( x ) , alpha * tf.nn.relu( -x ) , name=name )
+
+
 class DDPG( object ):
-    def __init__(self , obs_space , action_space , action_bound , h_size , act=tf.nn.relu , policy='det' ,
+    def __init__(self , obs_space , action_space , action_bound , h_size , act=lrelu, policy='det' ,
                  split_obs=None, lr = 1e-3):
 
         self.state = tf.placeholder( 'float32' , shape=[ None , obs_space ] , name='state' )
@@ -28,7 +33,7 @@ class DDPG( object ):
         self.train_actor = tf.train.AdamOptimizer( learning_rate=lr ).apply_gradients( zip( self.actor_grads , self.params ) ,
                                                                                  global_step=tf.contrib.framework.get_global_step() )
 
-    def shared_network(self , h_size=128 , split_obs=None , act=tf.nn.elu):
+    def shared_network(self , h_size=128 , split_obs=None , act=lrelu):
 
         if split_obs:
 
@@ -55,7 +60,7 @@ class DDPG( object ):
 
         return h1
 
-    def policy_network(self , h1 , bound , action_space , h_size=64 , policy='det' , act=tf.nn.elu):
+    def policy_network(self , h1 , bound , action_space , h_size=64 , policy='det' , act=lrelu):
 
         h2 = fully_connected( inputs=h1 , num_outputs=h_size , activation_fn=act )
 
@@ -72,7 +77,7 @@ class DDPG( object ):
         summarize_activation( mu_hat )
         return mu_hat
 
-    def value_network(self , h1 , h_size , action_space , act = tf.nn.elu):
+    def value_network(self , h1 , h_size , action_space , act = lrelu):
 
         w1 = tf.get_variable( 'w1' , shape=[ h_size[ 0 ] , h_size[ 1 ] ] , dtype=tf.float32 )
         w2 = tf.get_variable( 'w2' , shape=[ action_space , h_size[ 1 ] ] , dtype=tf.float32 )
@@ -115,5 +120,3 @@ def build_summaries(scalar=None , hist=None):
     return tf.summary.merge( summary_ops )
 
 
-def lrelu(x , alpha=0.2 , name=None):
-    return tf.subtract( tf.nn.relu( x ) , alpha * tf.nn.relu( -x ) , name=name )
