@@ -12,7 +12,7 @@ def main():
     env_name = 'Walker2d-v1'
     env , env_dims = create_env(env_name)
     agent = Agent(obs_dim=env_dims[0] , act_dim=env_dims[1] , kl_target=1e-2)
-    play(agent=agent , env=env , env_dims=env_dims , max_steps=256)
+    play(agent=agent , env=env , env_dims=env_dims , max_steps=128)
 
 
 def warmup(env , ob_filter , max_steps=256 , ep=1):
@@ -28,7 +28,7 @@ def warmup(env , ob_filter , max_steps=256 , ep=1):
     tf.logging.info('Warmup ended')
 
 
-def play(agent , env , env_dims , max_ep=100 , max_steps=256):
+def play(agent , env , env_dims , max_ep=1000 , max_steps=256):
     ob_filter = ZFilter((env_dims[0] ,))
     memory = Memory(env_dims[0] , env_dims[1] , max_steps =max_steps)
     seq_gen = unroll(env , agent , memory , ob_filter=ob_filter , max_steps=max_steps)
@@ -46,7 +46,9 @@ def play(agent , env , env_dims , max_ep=100 , max_steps=256):
 
         expl_var = explained_variance(sequence['vs'] , sequence['tdl'])
         tf.logging.info('Current ep {},steps so far {} ,explained var {}'.format(ep , ep*max_steps, expl_var))
+        tf.logging.info('Avg reward {}, Avg value {}'.format(sequence['rws'].mean() , sequence['vs'].mean()))
         tf.logging.info('\n Policy loss {} \n Value loss {} \n KL {} \n Entropy {} '.format(*stats))
+
 
 
         # TODO dump dataset
@@ -80,7 +82,7 @@ def unroll(env , agent , memory , max_steps=2048 , ob_filter=None):
             ep += 1
 
 
-def compute_target(seq , gamma=0.99 , lam=1.0):
+def compute_target(seq , gamma=0.99 , lam=0.95):
     # TODO not sure why using the tdl estimator instead of the discounted sum of rewards
     dones = np.append(seq['ds'] , 0)
     v_hat = np.append(seq['vs'] , seq['v_next'])
