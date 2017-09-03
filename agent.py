@@ -51,7 +51,7 @@ class Agent(object):
                 feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl']}
                 value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
 
-        self.update_beta(kl)
+        self.update_beta_cody(kl)
 
         return policy_loss , value_loss , kl , e
 
