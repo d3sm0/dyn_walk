@@ -19,6 +19,7 @@ tf.logging.set_verbosity( tf.logging.INFO )
 # TODO save dataset of experience !
 # TODO check prioritized experience code
 # TODO rewrite wrapper as FIFO or queue
+# TODO add warmup
 
 ENV_NAME = 'osim'  # 'Walker2d-v1''Pendulum-v0''osim'
 MEMORY_SIZE = int( 1e6 )
@@ -29,23 +30,23 @@ SAVE_EVERY = 100
 H_SIZE = [ 128 , 64 ]
 PRE_TRAIN = None
 POLICY = 'det'  # stochastic, sin
-ACTIVATION = lrelu
+ACTIVATION = tf.nn.elu
 CONCATENATE_FRAMES = 3
-USE_RW = True
+USE_RW = False
 MOTIVATION = None
 CLIP = 20
 LOAD_FROM = None # 'Aug-31_00_57'  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
 FRAME_RATE = 50  # pick 1/4
 NORMALIZE = True  # Recenter wrt to the torso and Statistically normalization
-DESCRIPTON = 'Testing osim concatenatig 3 frames with augmented reward, as in deep mind paper ' \
+DESCRIPTON = 'Testing osim concatenatig 3 frames with no reward, as in deep mind paper ' \
              'batch normalization with running mean and variance. Using clipping gradients and value function. ' \
              'Using prioritzed memory. Topology [128,64] with Shared layers. ' \
-             'lrelu act function and tanh.'
+             'elu act function and tanh.'
 
 
 def main():
-    #now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
-    now = 'Aug-31_00_57'
+    now = datetime.utcnow().strftime( "%b-%d_%H_%M" )  # create unique dir
+    #now = 'Sep-01_17_39' # 'Sep-31_00_57'
     full_path = os.path.join( os.getcwd() , ENV_NAME , 'logs' , now )
 
     tf.logging.info( now )
