@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-def fc(x, h_size, name, init = tf.random_normal_initializer(stddev=1.0)):
+def fc(x, h_size, name, init = tf.random_normal_initializer(stddev=0.1)):
     # Add initializer here
     with tf.variable_scope(name):
         input_size = x.get_shape()[1]

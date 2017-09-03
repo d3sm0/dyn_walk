@@ -12,9 +12,9 @@ class ValueNetwork(object):
             self.grad_op()
             self.train_op()
 
-    def train_op(self):
+    def train_op(self, lr= 1e-4):
         self.loss = tf.reduce_mean(tf.square(self.vf - self.tdl) , name='value_loss')
-        self.train = tf.train.AdamOptimizer().minimize(self.loss)
+        self.train = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.loss)
 
     def var_list(self):
         self.params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES , scope=tf.get_variable_scope().name)
@@ -24,11 +24,12 @@ class ValueNetwork(object):
 
     def init_ph(self , obs_dim):
         self.obs = tf.placeholder('float32' , shape=(None , obs_dim) , name='state')
-        self.tdl = tf.placeholder('float32' , shape=(None ,) , name='tdl')
+        self.tdl = tf.placeholder('float32' , shape=(None) , name='tdl')
 
     def init_network(self , h_size , act):
         h0 = act(fc(self.obs , h_size , 'h0'))
         h1 = act(fc(h0 , h_size , 'h1'))
         h2 = act(fc(h1 , 64 , 'h2'))
-        vf = fc(h2 , 1 , 'vf')
+        h3 = act(fc(h2 , 32 , 'h3'))
+        vf = fc(h3 , 1 , 'vf')
         self.vf = tf.squeeze(vf)
