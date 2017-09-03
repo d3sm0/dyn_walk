@@ -42,7 +42,7 @@ def play(agent , env , env_dims , max_ep=1000 , max_steps=256):
         # shuffle is False if recurrent policy
         stats = agent.train(
             Dataset(dict(obs=sequence['obs'] , acts=sequence['acts'] , adv=sequence['adv'] , tdl=sequence['tdl']) ,
-                    shuffle=True) , num_iter=10)
+                    shuffle=True) , num_iter=20)
 
         expl_var = explained_variance(sequence['vs'] , sequence['tdl'])
         tf.logging.info('Current ep {},steps so far {} ,explained var {}'.format(ep , ep*max_steps, expl_var))
