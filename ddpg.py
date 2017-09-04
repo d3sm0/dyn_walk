@@ -1,134 +1,81 @@
 import tensorflow as tf
 from tensorflow.contrib.layers import fully_connected, summarize_activation, summarize_tensor
 
+def lrelu(x , alpha=0.2 , name=None):
+    return tf.subtract( tf.nn.relu( x ) , alpha * tf.nn.relu( -x ) , name=name )
 
-class Actor(object):
-    def __init__(self, obs_space, action_space, action_bound, h_size, lr=1e-4, act=tf.nn.elu, policy='det',
-                 split_obs=None):
-        self.state = tf.placeholder('float32', shape=[None, obs_space], name='state')
 
-        if split_obs is not None:
-            self.internal_state = self.state[:, :split_obs]
-            self.external_state = self.state[:, split_obs:]
+class DDPG( object ):
+    def __init__(self , obs_space , action_space , action_bound , h_size , act=tf.nn.elu, policy='det' ,
+                 split_obs=None, lr = 1e-3):
 
-        self.grads = tf.placeholder('float32', shape=[None, action_space], name='gradients')
+        self.state = tf.placeholder( 'float32' , shape=[ None , obs_space ] , name='state' )
+        self.action = tf.placeholder( 'float32' , shape=[ None , action_space ] , name='action' )
 
-        self.mu_hat = self.build_network(h_size, action_space, action_bound, act, policy,
-                                         has_external=bool(split_obs))
 
-        self.params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=tf.get_variable_scope().name)
+        self.q = tf.placeholder( 'float32' , shape=[ None , 1 ] , name='q' )
 
-        self.actor_grads = tf.gradients(self.mu_hat, self.params, -self.grads)
+        h1 = self.shared_network(act=act)
 
-        self.train = tf.train.AdamOptimizer(learning_rate=lr).apply_gradients(zip(self.actor_grads, self.params),
-                                                                              global_step=tf.contrib.framework.get_global_step())
+        self.mu_hat = self.policy_network( h1 , bound=action_bound , action_space=action_space , act = act)
+        self.q_hat = self.value_network(h1, h_size = h_size, action_space=action_space, act = act)
 
-    def build_network(self, h_size, action_space, action_bound, act, policy, has_external=True):
+        self.params = tf.get_collection( tf.GraphKeys.GLOBAL_VARIABLES , scope=tf.get_variable_scope().name )
+        self.critic_loss = tf.reduce_mean( tf.squared_difference( self.q , self.q_hat ) , name='critic_loss' )
+
+        self.train_critic = tf.train.AdamOptimizer( learning_rate=lr).minimize( self.critic_loss ,
+                                                                          global_step=tf.contrib.framework.get_global_step() )
+        self.action_grads = tf.gradients( self.q_hat , self.action )[0]
+        self.actor_grads = tf.gradients( self.mu_hat , self.params , -self.action_grads)
+
+        self.train_actor = tf.train.AdamOptimizer( learning_rate=lr ).apply_gradients( zip( self.actor_grads , self.params ) ,
+                                                                                 global_step=tf.contrib.framework.get_global_step() )
+
+    def shared_network(self , h_size=128 , split_obs=None , act=lrelu):
 
         if split_obs:
 
-            p0 = fully_connected(inputs=self.internal_state, num_outputs=h_size[0], activation_fn=act)
+            h_size = 64
 
-            p1 = fully_connected(inputs=self.external_state, num_outputs=h_size[0], activation_fn=act)
+            self.internal_state = self.state[ : , :split_obs ]
+            self.external_state = self.state[ : , split_obs: ]
 
-            p1 = fully_connected(inputs=p1, num_outputs=h_size[0], activation_fn=act)
-            h1 = fully_connected(inputs=p0, num_outputs=h_size[1], activation_fn=act)
-            h2 = fully_connected(inputs=h1, num_outputs=h_size[1], activation_fn=act)
+            p0 = fully_connected( inputs=self.internal_state , num_outputs=h_size , activation_fn=act )
+            p0 = fully_connected( inputs=p0 , num_outputs=h_size , activation_fn=act )
 
-            h2 = tf.concat((h2, p1), axis=1)
+            p1 = fully_connected( inputs=self.external_state , num_outputs=h_size , activation_fn=act )
+            p1 = fully_connected( inputs=p1 , num_outputs=h_size , activation_fn=act )
 
-            summarize_activation(p0)
-            summarize_activation(p1)
+            h1 = tf.concat( (p0 , p1) , axis=1 )
+            summarize_activation( p0 )
+            summarize_activation( p1 )
 
         else:
-            h1 = fully_connected(inputs=self.state, num_outputs=h_size[0], activation_fn=act)
-            h2 = fully_connected(inputs=h1, num_outputs=h_size[1], activation_fn=act)
+            h0 = fully_connected( inputs=self.state , num_outputs=h_size , activation_fn=act )
+            h1 = fully_connected( inputs=h0 , num_outputs=h_size , activation_fn=act )
+            summarize_activation( h0 )
+            summarize_activation( h1 )
+
+        return h1
+
+    def policy_network(self , h1 , bound , action_space , h_size=64 , policy='det' , act=lrelu):
+
+        h2 = fully_connected( inputs=h1 , num_outputs=h_size , activation_fn=act )
 
         mu_hat = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=tf.nn.tanh,
                                  weights_initializer=tf.random_uniform_initializer(minval=-0.003, maxval=0.003),
                                  scope='policy')
 
         if policy == 'stochastic':
-            mu_hat = self.stochastic_policy(h2, action_space)
+            mu_hat = self.stochastic_policy( h1 , action_space , mu_hat )
 
-        elif policy == 'sin':
-            mu_hat = self.sin_policy(h2, mu_hat, action_space)
+        mu_hat = tf.clip_by_value(mu_hat,clip_value_min=bound[0], clip_value_max=bound[1])
 
-        action = tf.clip_by_value(mu_hat, action_bound[0], action_bound[1], name='scaled')
-
-        summarize_activation(h1)
-        summarize_activation(h2)
-
-        summarize_activation(mu_hat)
-
-        return action
-
-    def sin_policy(self, h2, mu_hat, action_space):
-
-        amplitude = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=None)
-
-        mu_hat = tf.map_fn(fn=lambda x: tf.sin(x * 2) + 1 / 2, elems=mu_hat)
-        mu_hat = tf.multiply(amplitude, mu_hat)
-
+        summarize_activation( h2 )
+        summarize_activation( mu_hat )
         return mu_hat
 
-    def stochastic_policy(self, h2, action_space):
-
-        mu_hat = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=None)
-
-        # var = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=tf.nn.softplus)
-        #
-        logsd = tf.get_variable( 'sd' , dtype=tf.float32 , shape=(1, action_space), initializer=tf.zeros_initializer())
-        # var = tf.reshape( var , (-1 , action_space) )
-
-        action = mu_hat + tf.random_normal(shape=tf.shape(mu_hat)) * tf.exp(logsd)
-        summarize_tensor(tf.exp(logsd), tag='sd')
-        summarize_tensor(action, tag='sampled_action')
-        return action
-
-
-class Critic(object):
-    def __init__(self, obs_space, action_space, h_size, lr=1e-3, act=tf.nn.elu, split_obs=None):
-        self.state = tf.placeholder('float32', shape=[None, obs_space], name='state')
-        self.action = tf.placeholder('float32', shape=[None, action_space], name='action')
-
-        self.q = tf.placeholder('float32', shape=[None, 1], name='q')
-
-        if split_obs is not None:
-            self.internal_state = self.state[:, :split_obs]
-            self.external_state = self.state[:, split_obs:]
-
-        self.q_hat = self.build_network(h_size, action_space, act, has_external=bool(split_obs))
-
-        self.params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=tf.get_variable_scope().name)
-
-        self.critic_loss = tf.reduce_mean(tf.squared_difference(self.q, self.q_hat), name='critic_loss')
-
-        # self.critic_gradients = tf.gradients(self.critic_loss, self.params)
-
-        self.train = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.critic_loss,
-                                                                       global_step=tf.contrib.framework.get_global_step())
-
-        self.action_grads = tf.gradients(self.q_hat, self.action)
-
-    def build_network(self, h_size, action_space, act, has_external):
-
-        if has_external:
-
-            p0 = fully_connected(inputs=self.internal_state, num_outputs=h_size[0], activation_fn=act)
-            p1 = fully_connected(inputs=self.external_state, num_outputs=h_size[0], activation_fn=act)
-
-            p1 = fully_connected(inputs=p1, num_outputs=h_size[0], activation_fn=act)
-
-            h1 = fully_connected(inputs=p0, num_outputs=h_size[0], activation_fn=act)
-
-            h1 = tf.concat((h1, p1), axis=1)
-
-            summarize_activation(p0)
-            summarize_activation(p1)
-
-        else:
-            h1 = fully_connected(inputs=self.state, num_outputs=h_size[0], activation_fn=act)
+    def value_network(self , h1 , h_size , action_space , act = lrelu):
 
         w1 = tf.get_variable('w1', shape=[h_size[0], h_size[1]], dtype=tf.float32)
         w2 = tf.get_variable('w2', shape=[action_space, h_size[1]], dtype=tf.float32)
@@ -171,5 +118,3 @@ def build_summaries(scalar=None, hist=None):
     return tf.summary.merge(summary_ops)
 
 
-def lrelu(x, alpha=0.05, name=None):
-    return tf.subtract(tf.nn.relu(x), alpha * tf.nn.relu(-x), name=name)

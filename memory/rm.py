@@ -17,6 +17,7 @@ class Experience ( object ):
             os.mkdir(self.log_dir)
         except OSError:
             pass
+
     def collect(self , step, curr_ep):
 
         if len(self.buffer) < self.buffer.maxlen:
