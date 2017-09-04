@@ -7,10 +7,11 @@
   "SAVE_EVERY" : 100,
   "H_SIZE" : [128, 64],
   "POLICY" : "det",
-  "ACTIVATION" : "lrelu",
+  "ACTIVATION" : "tf.nn.elu",
   "CONCATENATE_FRAMES" : 3,
-  "USE_RW" : true,
+  "FRAME_RATE":50,
+  "USE_RW" : false,
   "NORMALIZE" : true,
-  "DESCRIPTON" : "Testing Walker2d concatenating 3 frames with ICM model with with reward function. Using prioritzed memory and 128,64, and lrelu.",
+  "DESCRIPTON" : "Testing osim concatenatig 3 frames with no reward, as in deep mind paper batch normalization with running mean and variance. Using clipping gradients and value function. Using prioritzed memory. Topology [128,64] with Shared layers. elu act function and tanh",
   "REPORT_EVERY" : 5
 }

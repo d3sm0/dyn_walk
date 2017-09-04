@@ -4,18 +4,15 @@ from osim.env import RunEnv
 from collections import deque
 
 
-# TODO rewrite observation management using FIFO or queue
-
-
 class Environment(RunEnv):
     def __init__(self, frame_rate=50, concat=3, augment_rw=False, normalize=True):
         super(Environment, self).__init__(visualize=False, max_obstacles=3)
         self.frame_rate = frame_rate
-        self.observation_space = (self.env.observation_space.shape[0] * concat) + 7
-        self.action_space = self.env.action_space.shape[0]
-        self.bound = (self.env.action_space.low, self.env.action_space.high)
+        self.observation_space = (self.observation_space.shape[0] * concat) + 7
+        self.sample = self.action_space.sample
+        self.action_space, self.bound = (self.action_space.shape[0], (self.action_space.low, self.action_space.high))
         self.split_obs = self.observation_space - (3 * concat)
-        self.difficulty = 2
+        self.difficulty = 3
         self.r = 0
         self.concat = concat
         self.augment_rw = augment_rw
@@ -28,14 +25,12 @@ class Environment(RunEnv):
     def get_dims(self):
         return self.observation_space, self.action_space, self.bound
 
-    def close(self):
-        return self.env.close()
-
     # def reset(self, difficulty=0):
     def reset(self, difficulty=2, seed=None):
         state = super(Environment, self).reset(difficulty, seed)
 
         states = np.tile(state, self.concat)
+        self.queue.append(self.get_observation())
         self.r = 0
         return self.concat_frame(states)
 
@@ -43,11 +38,10 @@ class Environment(RunEnv):
         terminal = False
         reward = 0
 
-        for _ in range(len(self.queue) - self.concat + 1):
-            state, r, terminal, info = self.skip_frame(action)
+        for _ in range(self.concat-1):
+            state , r , terminal , info = self.skip_frame(action)
             self.queue.append(state)
             reward += r
-
             if terminal:
                 # pad the queue with end state
                 self.queue.append(state)
@@ -56,12 +50,12 @@ class Environment(RunEnv):
         if self.augment_rw:
             reward += self.surr_rw(self.queue[-1], action)
 
-        return self.concat_frame(np.array(list(self.queue))), reward, terminal, None
+        return self.concat_frame(np.array(list(self.queue)).flatten()), reward, terminal, None
 
     def skip_frame(self, action):
         reward = 0
         for _ in range(int(100 / self.frame_rate)):
-            s, r, t, info = self.env.step(action)
+            s, r, t, info = self._step(action)
             reward += r
             if t:
                 break
@@ -81,26 +75,26 @@ class Environment(RunEnv):
 
     def concat_frame(self, states):
         len = states.shape[0]
-        width = len % self.concat
+        width = len / self.concat
         dest = states.copy()
         last_cols = []
         for idx in range(self.concat):
             state_from = (idx * width)
-            state_to = (idx + 1) * (width - 3)
+            state_to = ((idx + 1) * width) - 3
 
             dest_from = (idx * width) - (3 * idx)
             dest_to = dest_from + (width - 3)
 
             last_cols.append(states[state_to: state_to + 3])
-            _tmp = states[state_from: state_to]
-            if self.normalize:
-                _tmp = self.normalize_cm(_tmp)
+            # _tmp =
+            # if self.z_filter:
+            #     _tmp = self.normalize_cm(_tmp)
 
-            dest[dest_from: dest_to] = _tmp
+            dest[dest_from: dest_to] = states[state_from: state_to]
 
         dest[-3*self.concat:] = np.concatenate(last_cols)
 
-        last_state_from = (width - 3) * self.concat - 1
+        last_state_from = (width - 3) * (self.concat - 1)
         vel = self.augment_state(states[:width - 3], states[last_state_from:])
         states = np.insert(arr=states, obj=(width - 3), values=vel)
 
