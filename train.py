@@ -44,12 +44,12 @@ def main(config):
 
         tot_td , tot_q , tot_rw , timesteps = worker.unroll(curr_ep = ep)
 
-        if ep % config['REPORT_EVERY'] == 0:
+        if ep > 0  and ep % config['REPORT_EVERY'] == 0:
             worker.report_metrics(tot_td , tot_q , tot_rw , timesteps , ep)
             tf.logging.info(
                 'Master ep  {}, latest avg reward {}, of steps {}'.format(ep , tot_rw / timesteps , timesteps))
 
-        if ep % config['SAVE_EVERY'] == 0:
+        if ep>0 and ep % config['SAVE_EVERY'] == 0:
             worker.agent.save_progress()
 
 if __name__ == '__main__':
