@@ -32,7 +32,7 @@ class Worker(object):
         timesteps , tot_rw , tot_q , tot_td = 0 , 0 , 0 , 0
         while not terminal:
             # if stochastic remove exploration noise
-            action = self.agent.get_action(state).flatten() + self.agent.ou.noise()
+            action = self.agent.get_action(state).flatten()  + self.agent.ou.noise()
             next_state , reward , terminal , _ = self.env.step(action)
             step = (state , action , reward , next_state , terminal)
             self.memory.collect(step , curr_ep)

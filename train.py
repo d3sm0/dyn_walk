@@ -9,11 +9,7 @@ import json
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-
 # TODO create argument parser
-# TODO create faster way to write experiment readme
-# TODO save dataset of experience !
-
 
 def main(config):
     now = datetime.utcnow().strftime("%b-%d_%H_%M")  # create unique dir
@@ -27,7 +23,7 @@ def main(config):
         pass
 
     with open(os.path.join(log_dir , 'readme.md') , 'a') as f:
-        f.write(config['DESCRIPTON'])
+        json.dump(config, f)
 
     target = Target(log_dir)
 
