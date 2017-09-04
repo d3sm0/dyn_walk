@@ -6,6 +6,7 @@ import numpy as np
 from agent import Agent
 from utils.ou_noise import OUNoise
 from utils.env_wrapper import EnvWrapper
+from memory.rm import Experience
 
 from ddpg import lrelu
 
@@ -29,16 +30,16 @@ NUM_EP = 5000
 SAVE_EVERY = 100
 H_SIZE = [ 128 , 64 ]
 PRE_TRAIN = None
-POLICY = 'det'  # stochastic, sin
+POLICY = 'stochastic'  # stochastic, sin
 ACTIVATION = tf.nn.elu
 CONCATENATE_FRAMES = 3
 USE_RW = False
 MOTIVATION = None
 CLIP = 20
 LOAD_FROM = None # 'Aug-31_00_57'  # 'Aug-29_12_08' # 'Aug-29_12_08' # 'Aug-28_22_29'  # 'Aug-27_18_06'
-FRAME_RATE = 50  # pick 1/4
+FRAME_RATE = 25# pick 1/4
 NORMALIZE = True  # Recenter wrt to the torso and Statistically normalization
-DESCRIPTON = 'Testing osim concatenatig 3 frames with no reward, as in deep mind paper ' \
+DESCRIPTON = 'Testing osim concatenatig 3 frames with no reward, frame rate 25' \
              'batch normalization with running mean and variance. Using clipping gradients and value function. ' \
              'Using prioritzed memory. Topology [128,64] with Shared layers. ' \
              'elu act function and tanh.'
@@ -88,11 +89,11 @@ def main():
     with open( os.path.join( full_path , 'readme.md' ) , 'w+' ) as f:
         f.write( DESCRIPTON )
 
+
     with tf.Session() as sess:
 
         if ckpt:
             try:
-                tf.logging.info( 'Restore model {}'.format( ckpt ) )
                 saver.restore( sess=sess , save_path=ckpt )
             except Exception as e:
                 tf.logging.info( e )
@@ -103,6 +104,9 @@ def main():
         summarize = False
         ep_summary = tf.Summary()
         ou = OUNoise( action_dimension=env_dims[ 1 ] )
+        memory= Experience(buffer_size=1e4, batch_size=agent.memory.batch_size, log_dir=full_path)
+        warmup(env)
+
 
         for ep in range( NUM_EP ):
 
@@ -123,7 +127,9 @@ def main():
                     reward = np.clip( reward , -CLIP , CLIP )
 
                 td , q = agent.get_td( state , action , reward , next_state , terminal )
-                agent.memory.add( (state , action , reward , next_state , terminal) , priority=td )
+                step = (state , action , reward , next_state , terminal)
+                memory.collect(step, ep)
+                agent.memory.add( step , priority=td )
 
                 agent.think( summarize=summarize )
 
@@ -139,17 +145,13 @@ def main():
 
                 summarize = True
 
-                ep_summary.value.add( simple_value=tot_rw / timesteps , tag='eval/avg_surr_rw' )
+                ep_summary.value.add( simple_value=tot_rw / timesteps , tag='eval/avg_rw' )
                 ep_summary.value.add( simple_value=tot_q / timesteps , tag='eval/avg_q' )
                 ep_summary.value.add( simple_value=tot_td / timesteps , tag='eval/avg_td' )
-                ep_summary.value.add( simple_value=tot_rw , tag='eval/surr_rw' )
+                ep_summary.value.add( simple_value=tot_rw , tag='eval/total_rw' )
                 ep_summary.value.add( simple_value=tot_td , tag='eval/total_td' )
                 ep_summary.value.add( simple_value=tot_q , tag='eval/total_q' )
                 ep_summary.value.add( simple_value=timesteps , tag='eval/ep_length' )
-
-                if ENV_NAME == 'osim':
-                    ep_summary.value.add( simple_value=env.r / timesteps , tag='eval/avg_rw' )
-                    ep_summary.value.add( simple_value=env.r , tag='eval/total_rw' )
 
                 agent.writer.add_summary( ep_summary , ep )
                 agent.writer.flush()
@@ -157,10 +159,23 @@ def main():
                 tf.logging.info(
                     'Master ep  {}, latest avg reward {}, of steps {}'.format( ep , tot_rw / timesteps , timesteps ) )
 
-            if ep % SAVE_EVERY == 0:
+            if ep>0 and ep % SAVE_EVERY == 0:
                 gs = tf.train.global_step( sess , global_step )
                 saver.save( sess , os.path.join( full_path , 'model.ckpt' ) , global_step=gs )
                 tf.logging.info( 'Model saved at ep {}'.format( gs ) )
+
+
+def warmup(env):
+    for ep in range(5):
+        env.reset()
+        t = False
+        while not t:
+            a = env.env.action_space.sample()
+            _ , _ , t , _ = env.step(a)
+            if t:
+                break
+    tf.logging.info('Warmup done')
+
 
 
 def eval(path , NUM_EP=5):
@@ -200,7 +215,6 @@ def eval(path , NUM_EP=5):
 
         if ckpt:
             try:
-                tf.logging.info( 'Restore model {}'.format( ckpt ) )
                 saver.restore( sess=sess , save_path=ckpt )
             except Exception as e:
                 tf.logging.info( e )
