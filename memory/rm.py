@@ -5,16 +5,18 @@ import pickle
 import os
 from datetime import datetime
 class Experience ( object ):
-    def __init__(self , buffer_size ,batch_size, log_dir):
+    def __init__(self , log_dir, buffer_size = 1e4 ,batch_size = 32):
         """
         The right side of the deque contains the most recent experiences
         """
         self.count = 0
         self.buffer = deque (maxlen=buffer_size)
         self.batch_size = batch_size
-        now = datetime.utcnow().strftime("%b-%d_%H_%M")  # create unique dir
-        self.log_dir = os.path.join(log_dir, 'dataset',now)
-        os.mkdir(self.log_dir)
+        self.log_dir = os.path.join(log_dir, 'dataset')
+        try:
+            os.mkdir(self.log_dir)
+        except OSError:
+            pass
     def collect(self , step, curr_ep):
 
         if len(self.buffer) < self.buffer.maxlen:
