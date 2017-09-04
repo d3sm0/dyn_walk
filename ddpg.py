@@ -3,7 +3,7 @@ from tensorflow.contrib.layers import fully_connected, summarize_activation, sum
 
 
 class Actor(object):
-    def __init__(self, obs_space, action_space, action_bound, h_size, lr=1e-4, act=tf.nn.relu, policy='det',
+    def __init__(self, obs_space, action_space, action_bound, h_size, lr=1e-4, act=tf.nn.elu, policy='det',
                  split_obs=None):
         self.state = tf.placeholder('float32', shape=[None, obs_space], name='state')
 
@@ -49,7 +49,7 @@ class Actor(object):
                                  scope='policy')
 
         if policy == 'stochastic':
-            mu_hat = self.stochastic_policy(h2, mu_hat, action_space)
+            mu_hat = self.stochastic_policy(h2, action_space)
 
         elif policy == 'sin':
             mu_hat = self.sin_policy(h2, mu_hat, action_space)
@@ -72,21 +72,23 @@ class Actor(object):
 
         return mu_hat
 
-    def stochastic_policy(self, h2, mu_hat, action_space):
+    def stochastic_policy(self, h2, action_space):
 
-        var = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=tf.nn.softplus)
+        mu_hat = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=None)
+
+        # var = fully_connected(inputs=h2, num_outputs=action_space, activation_fn=tf.nn.softplus)
         #
-        # var = tf.nn.softplus( tf.get_variable( 'sd' , dtype=tf.float32 , shape=(action_space ,) ) )
+        logsd = tf.get_variable( 'sd' , dtype=tf.float32 , shape=(1, action_space), initializer=tf.zeros_initializer())
         # var = tf.reshape( var , (-1 , action_space) )
 
-        action = mu_hat + tf.random_normal(shape=tf.shape(mu_hat)) * tf.sqrt(var)
-        summarize_tensor(var, tag='var')
+        action = mu_hat + tf.random_normal(shape=tf.shape(mu_hat)) * tf.exp(logsd)
+        summarize_tensor(tf.exp(logsd), tag='sd')
         summarize_tensor(action, tag='sampled_action')
         return action
 
 
 class Critic(object):
-    def __init__(self, obs_space, action_space, h_size, lr=1e-3, act=tf.nn.relu, split_obs=None):
+    def __init__(self, obs_space, action_space, h_size, lr=1e-3, act=tf.nn.elu, split_obs=None):
         self.state = tf.placeholder('float32', shape=[None, obs_space], name='state')
         self.action = tf.placeholder('float32', shape=[None, action_space], name='action')
 
