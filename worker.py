@@ -12,7 +12,7 @@ class Worker( object ):
                             policy=config[ 'POLICY' ] , act=eval(config[ 'ACTIVATION' ] ), split_obs=None )
         self.writer = tf.summary.FileWriter( self.agent.log_dir, filename_suffix="episode_metrics" )
         self.ep_summary = tf.Summary()
-        self.memory = Experience(buffer_size=self.agent.memory.buffer_size,batch_size=self.agent.memory.batch_size, log_dir=log_dir)
+        self.memory = Experience(buffer_size=1e4,log_dir=log_dir)
 
 
     def warmup(self, ep = 5):
@@ -54,11 +54,6 @@ class Worker( object ):
         self.ep_summary.value.add( simple_value=tot_td , tag='eval/total_td' )
         self.ep_summary.value.add( simple_value=tot_q , tag='eval/total_q' )
         self.ep_summary.value.add( simple_value=timesteps , tag='eval/ep_length' )
-        # try:
-        #     self.ep_summary.value.add( simple_value=self.env.r / timesteps , tag='eval/avg_rw' )
-        #     self.ep_summary.value.add( simple_value=self.env.r , tag='eval/total_rw' )
-        # except AttributeError:
-        #     pass
         self.writer.add_summary( self.ep_summary , episode_count)
         self.writer.flush()
 
