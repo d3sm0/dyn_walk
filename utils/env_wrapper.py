@@ -73,10 +73,12 @@ class EnvWrapper( object ):
 
         # stay_up
         delta_h = (state[ 27 ] - .5 * (state[ 35 ] + state[ 33 ]))
-        # delta_x = (state[ 18 ] - .5 * (state[ 32 ] + state[ 34 ]))
+        delta_x = (state[ 18 ] - .5 * (state[ 32 ] + state[ 34 ]))
 
         # v_pelvis_x - fall_penalty - movement normalized wrt the height - wild actions
-        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8) # - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
+        # rw = 10 * state[ 4 ] - 10 * (state[2] < 0.65) # - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
+        # rw = 10 * (1 - 2 * max( 0 , (abs( delta_x - 0.1 ) - 0.15) ))  - 10*(delta_h < 0.7)
+        rw = 10 * state[ 4 ] - 10 * (delta_h < 0.8) - abs( delta_h - 1. )  # - 0.02 * np.linalg.norm( action )
         return np.asscalar( rw )
 
     def concat_frame(self , states):

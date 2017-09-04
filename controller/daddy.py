@@ -1,9 +1,9 @@
 import numpy as np
 import pickle
 import tensorflow as tf
-from replay_buffer import Experience
+from memory.rm import Experience
 
-file_name = 'w.pkl'
+file_name = 'controller/w.pkl'
 
 
 class Daddy( object ):
@@ -18,7 +18,7 @@ class Daddy( object ):
         actor_params = [ v for v in target.actor.params if 'policy' not in v.name ]
         self.sync_op = target.update_target( actor_params , target.critic.params[ :len(actor_params) ] ,
                                           tau=1 )
-
+        self.T = 4
         self.w = self.load_w( file_name=file_name )
         self.memory = Experience(buffer_size=buffer_size, batch_size=batch_size)
 
@@ -47,9 +47,9 @@ class Daddy( object ):
             y += a[ i ] * np.sin( (i + 1) * np.pi * 2 * t / self.T + a[ i + 4 ] )
         return y
 
-    def get_action(self , w , t):
+    def get_policy(self , w , t):
 
-        inputs = [ -self.output( w[ 0 ] , t ) , self.output( w[ 1 ] , t ) , -self.output( w[ 2 ] , t ) ,
+        policy = [ -self.output( w[ 0 ] , t ) , self.output( w[ 1 ] , t ) , -self.output( w[ 2 ] , t ) ,
                    self.output( w[ 3 ] , t ) , self.output( w[ 4 ] , t ) , self.output( w[ 5 ] , t ) ,
                    -self.output( w[ 6 ] , t ) , -self.output( w[ 7 ] , t ) , self.output( w[ 8 ] , t ) ,
                    self.output( w[ 0 ] , t + self.T / 2 ) , -self.output( w[ 1 ] , t + self.T / 2 ) ,
@@ -59,15 +59,15 @@ class Daddy( object ):
                    self.output( w[ 6 ] , t + self.T / 2 ) , self.output( w[ 7 ] , t + self.T / 2 ) ,
                    -self.output( w[ 8 ] , t + self.T / 2 ) , ]
 
-        return inputs
+        return policy
 
     def load_w(self , file_name):
-        try:
-            with open( file_name , 'rb' ) as f:
-                w = pickle.load( f )
-            return w
-        except IOError:
-            print('File not found')
+        # try:
+        with open( file_name , 'rb' ) as f:
+            w = pickle.load( f )
+        return w
+        # except IOError:
+        #     print('File not found')
 
     def save_memory(self , file_name):
         try:
@@ -84,44 +84,61 @@ class Daddy( object ):
                 tf.logging.info( 'Load daddy memory' )
         except Exception as e:
             tf.logging.info( e )
+            
+    def get_action(self, t):
 
-    def sample(self , env):
-        diff = np.random.randint( 2 )
-        state = env.reset( difficulty=diff )
-        tf.logging.info( 'Starting new env with diff {}'.format( diff ) )
+        # selected number
+        i = t * 0.01
 
-        w_best , w_first = self.w[ 'best' ] , self.w[ 'first' ]
-        total_reward = 0.0
-        l = 0
+        if (i > 4.6):
+            i -= 4.2
+            self.T = 2
+            action = self.get_policy( self.w[ 'best' ] , i )
+        elif (i > 2):
+            i -= 2
+            self.T = 2
+            action = self.get_policy( self.w[ 'best' ] , i )
+        else:
+            action = self.get_policy( self.w[ 'first' ] , i )
+        return action
 
-        self.T = 4
+    # def sample(self , env, diff = 0):
+    # 
+    #     state = env.reset( difficulty=diff)
+    # 
+    #     w_best , w_first = self.w[ 'best' ] , self.w[ 'first' ]
+    #     total_reward = 0.0
+    #     l = 0
+    # 
+    #     self.T = 4
+    # 
+    #     for i in range( 1000 ):
+    #         i *= 0.01
+    # 
+    #         if (i > 4.6):
+    #             i -= 4.2
+    #             self.T = 2
+    #             action = self.get_action( w_best , i )
+    # 
+    #         elif (i > 2):
+    #             i -= 2
+    #             self.T = 2
+    #             action = self.get_action( w_best , i )
+    #         else:
+    #             action = self.get_action( w_first , i )
+    # 
+    #         next_state , reward , terminal , _ = env.step( action )
+    #         self.memory.add( state , action , reward , next_state , terminal )
+    # 
+    #         l += self.teach( state , action )
+    # 
+    #         total_reward += reward
+    #         state = next_state
+    # 
+    #         if terminal:
+    #             break
+    #     return l , total_reward/i , i
 
-        for i in range( 1000 ):
-            i *= 0.01
-
-            if (i > 4.6):
-                i -= 4.2
-                self.T = 2
-                action = self.get_action( w_best , i )
-
-            elif (i > 2):
-                i -= 2
-                self.T = 2
-                action = self.get_action( w_best , i )
-            else:
-                action = self.get_action( w_first , i )
-
-            next_state , reward , terminal , _ = env.step( action )
-            self.memory.add( state , action , reward , next_state , terminal )
-
-            l += self.teach( state , action )
-
-            total_reward += reward
-            state = next_state
-
-            if terminal:
-                break
-        return l , total_reward/i , i
 
     def experience(self, epsiodes, env, writer):
 
