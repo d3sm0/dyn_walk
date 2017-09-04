@@ -5,7 +5,7 @@
   "GAMMA" : 0.99,
   "NUM_EP" : 20000,
   "SAVE_EVERY" : 100,
-  "H_SIZE" : [256, 128],
+  "H_SIZE" : [256,128],
   "POLICY" : "det",
   "ACTIVATION" : "tf.nn.elu",
   "CONCATENATE_FRAMES" : 3,
