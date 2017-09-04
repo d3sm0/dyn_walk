@@ -1,0 +1,17 @@
+{
+  "ENV_NAME" : "osim",
+  "MEMORY_SIZE" : 1000000,
+  "BATCH_SIZE" : 32,
+  "GAMMA" : 0.99,
+  "NUM_EP" : 5000,
+  "SAVE_EVERY" : 100,
+  "H_SIZE" : [128, 64],
+  "POLICY" : "det",
+  "ACTIVATION" : "tf.nn.elu",
+  "CONCATENATE_FRAMES" : 3,
+  "FRAME_RATE":50,
+  "USE_RW" : false,
+  "NORMALIZE" : true,
+  "DESCRIPTON" : "Testing osim concatenatig 3 frames with no reward, as in deep mind paper batch normalization with running mean and variance. Using clipping gradients and value function. Using prioritzed memory. Topology [128,64] with Shared layers. elu act function and tanh",
+  "REPORT_EVERY" : 5
+}
