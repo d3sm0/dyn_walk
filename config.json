@@ -16,7 +16,7 @@
   "MAX_EP": 20000,
   "MAX_STEPS": 2048,
   "KL_TARGET": 0.01,
-  "ETA": 500,
+  "ETA": 1000,
   "BETA": 1.0,
   "H_SIZE": [
     128,

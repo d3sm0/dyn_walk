@@ -1,21 +1,24 @@
 import os
 import shutil
 import csv
+from datetime import datetime
 
 class Logger(object):
     """ Simple training logger: saves to file and optionally prints to stdout """
-    def __init__(self, logname, now):
+    def __init__(self, env_name):
         """
         Args:
             logname: name for log (e.g. 'Hopper-v1')
             now: unique sub-directory name (e.g. date/time string)
         """
-        self.path = os.path.join('log-files', logname, now)
-        os.makedirs(self.path)
+        now = datetime.utcnow().strftime("%b-%d_%H_%M")  # create unique dir
+
+        self.main_path = os.path.join('log-files', env_name, now)
+        os.makedirs(self.main_path)
         # filenames = glob.glob('*.py')  # put copy of all python files in log_dir
         # for filename in filenames:     # for reference
         #     shutil.copy(filename, path)
-        path = os.path.join(self.path, 'log.csv')
+        path = os.path.join(self.main_path, 'log.csv')
 
         self.write_header = True
         self.log_entry = {}
@@ -44,7 +47,7 @@ class Logger(object):
         """Print metrics to stdout"""
         log_keys = [k for k in log.keys()]
         log_keys.sort()
-        print('***** Episode {} *****'.format(log['_ep']))
+        print('***** Episode {} *****'.format(log['ep']))
         for key in log_keys:
             # if key[0] != '_':  # don't display log items with leading '_'
             print('{:s}: {:.3g}'.format(key, log[key]))

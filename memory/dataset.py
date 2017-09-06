@@ -2,11 +2,12 @@ import numpy as np
 
 
 class Dataset(object):
-    def __init__(self , data , shuffle=True):
+    def __init__(self , data , batch_size=64 , shuffle=True):
         self.data = data
         self.enable_shuffle = True
         self.n = next(iter(data.values())).shape[0]
         self._next_id = 0
+        self.batch_size = batch_size
         self.shuffle()
 
     def shuffle(self):
@@ -15,33 +16,33 @@ class Dataset(object):
             self.data[key] = self.data[key][perm]
         self._next_id = 0
 
-    def next_batch(self , batch_size=64):
+    def next_batch(self):
         if self._next_id >= self.n and self.enable_shuffle:
             self.shuffle()
 
         curr_id = self._next_id
-        curr_batch_size = min(batch_size , self.n - self._next_id)
+        curr_batch_size = min(self.batch_size , self.n - self._next_id)
         self._next_id += curr_batch_size
         data = dict()
         for key in self.data:
             data[key] = self.data[key][curr_id:curr_id + curr_batch_size]
         return data
 
-    def iterate_once(self , batch_size=64):
+    def iterate_once(self):
         if self.enable_shuffle: self.shuffle()
-        while self._next_id <= self.n - batch_size:
-            yield self.next_batch(batch_size)
+        while self._next_id <= self.n - self.batch_size:
+            yield self.next_batch()
         self._next_id = 0
 
 
 class Memory(object):
-    def __init__(self , ob_dim, act_dim , max_steps):
+    def __init__(self , obs_dim , act_dim , max_steps):
         self.max_steps = max_steps
-        self.inits = (np.zeros((ob_dim,)) , np.zeros((act_dim,)))
+        self.inits = (np.zeros((obs_dim ,)) , np.zeros((act_dim ,)))
         self.reset()
 
     def reset(self):
-        ob, act = self.inits
+        ob , act = self.inits
         self.obs = np.array([ob for _ in range(self.max_steps)])
         self.acts = np.array([act for _ in range(self.max_steps)])
         self.rws = np.zeros(self.max_steps , 'float32')
@@ -76,4 +77,3 @@ class Memory(object):
         except IOError:
             print('Memory not saved')
             raise
-
