@@ -28,7 +28,7 @@ def warmup(env , ob_filter , max_steps=256 , ep=1):
     tf.logging.info('Warmup ended')
 
 
-def play(agent , env , env_dims , max_ep=1000 , max_steps=256):
+def play(agent , env , env_dims , max_ep=20000 , max_steps=256):
     ob_filter = ZFilter((env_dims[0] ,))
     memory = Memory(env_dims[0] , env_dims[1] , max_steps =max_steps)
     seq_gen = unroll(env , agent , memory , ob_filter=ob_filter , max_steps=max_steps)
@@ -48,10 +48,6 @@ def play(agent , env , env_dims , max_ep=1000 , max_steps=256):
         tf.logging.info('Current ep {},steps so far {} ,explained var {}'.format(ep , ep*max_steps, expl_var))
         tf.logging.info('Avg reward {}, Avg value {}'.format(sequence['rws'].mean() , sequence['vs'].mean()))
         tf.logging.info('\n Policy loss {} \n Value loss {} \n KL {} \n Entropy {} '.format(*stats))
-
-
-
-        # TODO dump dataset
 
 
 def create_env(env_name):
