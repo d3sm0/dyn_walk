@@ -52,12 +52,13 @@ class PolicyNetwork(object):
         # loss_1 = ratio * self.adv
         # loss_2 = tf.clip_by_value(ratio , 1 - 0.2 , 1 + 0.2) * self.adv
         # loss_3 = (-self.pi.entropy())
+        # self.loss = -tf.reduce_mean(tf.minimum(loss_1 , loss_2)) + loss_3  # PPO pessimistic surrogate
 
         loss_1 = -tf.reduce_mean(self.adv * tf.exp(self.pi.logpi(self.acts) - self.pi_old.logpi(self.acts)))
         loss_2 = tf.multiply(self.beta , self.kl)
         loss_3 = eta * tf.square(tf.maximum(0.0 , self.kl - 2.0 * kl_target))
         self.loss = loss_1 + loss_3 + loss_2
-        # self.loss = -tf.reduce_mean(tf.minimum(loss_1 , loss_2)) + loss_3  # PPO pessimistic surrogate
+
         self.train = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss, var_list=self._params)
         return (loss_1 , loss_2 , loss_3)
 
@@ -65,56 +66,3 @@ class PolicyNetwork(object):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
     def get_grads(self):
         return tf.gradients(self.loss , self.get_params())
-
-        # def logpi(self , action):
-        #     k = np.log(2.0 * np.pi) * self.act_dim
-        #     neglogpi = 0.5 * tf.reduce_sum(tf.square(action - self.mu / self.std) , axis=-1) + 0.5 * k + tf.reduce_sum(
-        #         self.logstd , axis=-1)
-        #     logpi = -neglogpi
-        #     return logpi
-        #
-        # def _logpi(self , mu , logstd , act_dim):
-        #     k = np.log(2.0 * np.pi) * act_dim
-        #     neglogpi = 0.5 * tf.reduce_sum(tf.square(self.acts - mu / tf.exp(logstd)) ,
-        #                                    axis=-1) + 0.5 * k + tf.reduce_sum(
-        #         logstd , axis=-1)
-        #     logpi = -neglogpi
-        #     return logpi
-        #
-        # def _entropy(self):
-        #     return tf.reduce_sum(self.logstd + .5 * np.log(2.0 * np.pi * np.e) , axis=-1)
-        #
-        # def d_kl(self , pi_other):
-        #     return tf.reduce_sum(
-        #         pi_other.logstd - self.logstd + (tf.square(self.std) + tf.square(self.mu - pi_other.mu)) / (
-        #             2.0 * tf.square(pi_other.std)) - 0.5 , axis=-1)
-        #
-        # def _d_kl(self):
-        #     return tf.reduce_sum(
-        #         self.logstd - self.logstd_old + (tf.square(tf.exp(self.logstd_old)) + tf.square(self.mu_old - self.mu)) / (
-        #             2.0 * tf.square(self.std)) - 0.5 , axis=-1)
-        #
-        # def sample(self):
-        #     return self.mu + tf.random_normal(tf.shape(self.mu)) * self.std
-        #
-        # def logpi(self , action):
-        #     k = np.log(2.0 * np.pi) * self.act_dim
-        #     neglogpi = 0.5 * tf.reduce_sum(tf.square(action - self.mu / self.std) , axis=-1) + 0.5 * k + tf.reduce_sum(
-        #         self.logstd , axis=-1)
-        #     logpi = -neglogpi
-        #     return logpi
-        #
-        # def entropy(self):
-        #     return tf.reduce_sum(self.logstd + .5 * np.log(2.0 * np.pi * np.e) , axis=-1)
-
-
-
-        # def sync_op(self):
-        #
-        #     assert len(self.params) == len(self.pi_old.params)
-        #
-        #     params = []
-        #     # transfer new policy value to old policy
-        #     for (pi_old , pi) in zip(self.pi_old.params , self.params):
-        #         params.append(tf.assign(pi_old , pi))
-        #     return params

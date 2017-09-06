@@ -1,6 +1,6 @@
 import os
-import shutil
 import csv
+import json
 from datetime import datetime
 
 class Logger(object):
@@ -24,6 +24,13 @@ class Logger(object):
         self.log_entry = {}
         self.f = open(path, 'w')
         self.writer = None  # DictWriter created with first call to write() method
+
+    def save_experiment(self, config):
+        try:
+            with open(os.path.join(self.main_path, 'readme.txt'), 'w') as f:
+                json.dump(config, f)
+        except OSError or IOError:
+            raise
 
     def write(self, display=True):
         """ Write 1 log entry to file, and optionally to stdout

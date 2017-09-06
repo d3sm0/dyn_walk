@@ -9,12 +9,17 @@ from worker import Worker
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
+"""
+Experiments starting:
+- Check value function with trusted region
+- Check value for eta
+"""
 
-# remember with no trustd region you tested 128 256 512, wuth trusted region you tested 512 256 128
+
 def main(config):
     logger = Logger(env_name=config['ENV_NAME'])
+    logger.save_experiment(config)
     worker = Worker(config , log_dir=logger.main_path)
-
     ob_filter = None
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0] ,))
@@ -27,7 +32,7 @@ def play(worker , config , logger=None , ob_filter=None):
 
     seq_gen = worker.unroll(ob_filter=ob_filter)
 
-    tf.logging.info('Init training')
+    tf.logging.info('Init training. Stats saved at ' + logger.main_path)
 
     t = 0
     while t < config['MAX_STEPS'] * config['MAX_EP']:
@@ -44,11 +49,12 @@ def play(worker , config , logger=None , ob_filter=None):
         logger.log(ep_stats)
         if t % config['REPORT_EVERY'] == 0:
             logger.write(display=True)
-            worker.write_summary(ep_stats, ep_stats['ep'])
+            worker.write_summary(ep_stats , ep_stats['ep'])
         if t % config['SAVE_EVERY'] == 0:
             worker.agent.save(log_dir=logger.main_path)
             tf.logging.info('Saved model at ep {}'.format(ep_stats['ep']))
         t = ep_stats['t']
+
 
 if __name__ == '__main__':
     with open('config.json') as f:

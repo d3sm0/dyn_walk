@@ -20,7 +20,7 @@ class ValueNetwork(object):
         # loss_2 = tf.square(v_clipped - self.tdl)
         # self.loss = .5 * tf.reduce_mean(
         #     tf.maximum(loss_1 , loss_2))  # we do the same clipping-based trust region for the value function
-
+        # print('Using trust region for VF')
         self.loss = tf.reduce_mean(tf.square(self.vf - self.tdl) , name='value_loss')
         self.train = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.loss, var_list=self._params)
 
