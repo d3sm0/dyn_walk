@@ -26,7 +26,7 @@ def main(config):
 
 
 def play(worker , config , logger=None , ob_filter=None):
-    worker.warmup(ob_filter , max_steps=config['MAX_STEPS_BATCH'])
+    worker.warmup(ob_filter , max_steps=config['WARMUP_TIME'])
 
     seq_gen = worker.unroll(ob_filter=ob_filter , max_steps=config['MAX_STEPS_BATCH'])
 

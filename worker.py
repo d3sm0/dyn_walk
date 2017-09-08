@@ -19,7 +19,7 @@ class Worker(object):
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
 
-    def warmup(self , ob_filter=None , max_steps=256 , ep=1):
+    def warmup(self , ob_filter=None , max_steps=64 , ep=1):
         for e in range(ep):
             ob = self.env.reset()
             for _ in range(max_steps):
