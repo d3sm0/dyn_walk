@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from utils.tf_utils import fc, get_params
 
-
+from tensorflow.contrib.layers import summarize_activation
 class ValueNetwork(object):
     def __init__(self , name , obs_dim , h_size=(128 , 64 , 32) , act=tf.tanh):
 
@@ -33,7 +33,7 @@ class ValueNetwork(object):
     def init_ph(self , obs_dim):
         self.obs = tf.placeholder('float32' , shape=(None , obs_dim) , name='state')
         self.tdl = tf.placeholder('float32' , shape=(None) , name='tdl')
-        self.value_old = tf.placeholder('float32' , shape=(None) , name='value_old')
+        # self.value_old = tf.placeholder('float32' , shape=(None) , name='value_old')
 
     def init_network(self , h_size=(128 , 64 , 32) , act=tf.nn.tanh):
         h = act(fc(self.obs , h_size[0] , name='input'))
@@ -41,3 +41,6 @@ class ValueNetwork(object):
             h = fc(h , h_size[i] , act=act, name='h{}'.format(i))
         vf = fc(h , 1 , 'vf')
         self.vf = tf.squeeze(vf)
+
+    def get_tensor_to_summarize(self):
+        return self._params + [self.loss] + [self.obs, self.tdl, self.vf] + self.get_grads()

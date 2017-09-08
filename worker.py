@@ -9,12 +9,15 @@ class Worker(object):
     def __init__(self , config , log_dir):
         self.env , self.env_dim , split_obs = self.init_environment(config)
 
-        self.agent = Agent(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], kl_target=config['KL_TARGET'] , eta=config['ETA'] ,
+        self.agent = Agent(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , kl_target=config['KL_TARGET'] ,
+                           eta=config['ETA'] ,
                            beta=config['BETA'] , h_size=config['H_SIZE'])
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
-        self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS_BATCH'])
+        self.memory = Memory(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS_BATCH'] ,
+                             main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
+        self.ep_summary = tf.Summary()
 
     def warmup(self , ob_filter=None , max_steps=256 , ep=1):
         for e in range(ep):
@@ -27,6 +30,22 @@ class Worker(object):
                     ob = self.env.reset()
 
         tf.logging.info('Warmup ended')
+
+    def eval(self , log_dir):
+
+        ob = self.env.reset()
+        vs , rs , i = 0 , 0 , 0
+        self.agent.load(log_dir)
+        t = False
+        while not t:
+            self.env.render()
+            a , v = self.agent.get_action_value(ob)
+            ob , r , t , _ = self.env.step(a)
+            vs += v
+            rs += r
+            i += 1
+
+        return {'rs': rs , 'vs': vs , 'i': i}
 
     def compute_target(self , seq):
 
@@ -46,9 +65,8 @@ class Worker(object):
         batch = seq.copy()
         # TODO can i compute the advatnage like this or should i use a variable and then reassign it?
         # standardize advantage. Should not change the element in seq
-        batch['adv']= (batch['adv']- batch['adv'].mean()) / batch['adv'].std()
+        batch['adv'] = (batch['adv'] - batch['adv'].mean()) / batch['adv'].std()
         return batch
-
 
     @staticmethod
     def init_environment(config):
@@ -81,7 +99,7 @@ class Worker(object):
         ob = self.env.reset()
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
         # TODO save only last 10 episodes using deque
-        ep_rws , ep_ls = [],[]
+        ep_rws , ep_ls = [] , []
         while True:
 
             if ob_filter: ob = ob_filter(ob)
@@ -89,7 +107,7 @@ class Worker(object):
             act , v = self.agent.get_action_value(ob)
 
             if t > 0 and t % max_steps == 0:
-                yield self.memory.release(v=v , done=done) , self.compute_summary(ep_rws , ep_ls , ep , t)
+                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_rws , ep_ls , ep , t)
                 ep_rws = []
                 ep_ls = []
             ob1 , r , done , _ = self.env.step(act)
@@ -103,11 +121,10 @@ class Worker(object):
                 ep += 1
                 ep_rws.append(ep_r)
                 ep_ls.append(ep_l)
-                ep_r =0
+                ep_r = 0
                 ep_l = 0
                 ob = self.env.reset()
             t += 1
-
 
     def compute_summary(self , *stats):
         ep_rws , ep_ls , ep , t = stats
@@ -118,17 +135,20 @@ class Worker(object):
             'avg_rw': np.array(ep_rws).mean() ,
             'avg_len': np.array(ep_ls).mean() ,
             'total_steps': t ,
-            'total_ep': ep,
+            'total_ep': ep ,
         }
         return ep_stats
 
+    def write_summary(self , stats , ep , network_stats=None):
 
-    def write_summary(self, stats, ep):
-        ep_summary = tf.Summary()
-
-        for (k,v) in stats.iteritems():
-            ep_summary.value.add(simple_value = v, tag = k)
-
-        self.writer.add_summary(ep_summary , ep)
+        for (k , v) in stats.iteritems():
+            if np.ndim(v) > 1:
+                self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
+                self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
+                self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
+            else:
+                self.ep_summary.value.add(simple_value=v , tag=k)
+        if network_stats is not None:
+            self.writer.add_summary(network_stats , ep)
+        self.writer.add_summary(self.ep_summary , ep)
         self.writer.flush()
-

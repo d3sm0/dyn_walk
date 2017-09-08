@@ -11,6 +11,8 @@ from worker import Worker
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
+# TODO check for topology (256, 128,64, 32) (256,128,64)
+
 def main(config):
     logger = Logger(env_name=config['ENV_NAME'])
     logger.save_experiment(config)
@@ -20,6 +22,7 @@ def main(config):
         ob_filter = ZFilter((worker.env_dim[0] ,))
 
     play(worker , config , logger=logger , ob_filter=ob_filter)
+
 
 
 def play(worker , config , logger=None , ob_filter=None):
@@ -34,23 +37,26 @@ def play(worker , config , logger=None , ob_filter=None):
         sequence , ep_stats = next(seq_gen)
 
         batch = worker.compute_target(sequence)
-        # TODO check here how to update properly. Batch is a deep copy of sequence
-        #obs, acts, adv, tdl, vs = batch['obs'], batch['acts'], batch['adv'], batch['tdl'], batch['vs']
-        #adv = (adv - adv.mean())/adv.std()
-        # b = Dataset(dict(obs=batch['obs'] , acts=batch['acts'], adv=adv, tdl=batch['tdl'] ,
-        #                  vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
+        # # TODO check here how to update properly. Batch is a deep copy of sequence
+        # obs , acts , adv , tdl , vs = batch['obs'] , batch['acts'] , batch['adv'] , batch['tdl'] , batch['vs']
+        # adv = (adv - adv.mean()) / adv.std()
+        # # b = Dataset(dict(obs=batch['obs'] , acts=batch['acts'], adv=adv, tdl=batch['tdl'] ,
+        # #                  vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
         # obs, acts, adv, tdl, vs = batch['obs'], batch['acts'], batch['adv'], batch['tdl'], batch['vs']
         #
-        dataset = Dataset(dict(obs=batch['obs'] , acts=batch['acts'], adv=batch['adv'], tdl=batch['tdl'] ,
-                         vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
+        dataset = Dataset(dict(obs=batch['obs'] , acts=batch['acts'] , adv=batch['adv'] , tdl=batch['tdl'] ,
+                               vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
-        stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
+        # dataset = Dataset(dict(obs=obs , acts=acts , adv=obs , tdl=tdl ,
+        #                        vs=vs) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
-        logger.log(merge_dicts(stats, ep_stats))
+        train_stats,_ = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
+
+        logger.log(merge_dicts(train_stats , ep_stats))
         if t % config['REPORT_EVERY'] == 0:
             logger.write(display=True)
-            worker.write_summary(merge_dicts(ep_stats,stats) , ep_stats['total_ep'])
+            worker.write_summary(merge_dicts(ep_stats , train_stats) , ep_stats['total_ep'] , network_stats=None)
         if t % config['SAVE_EVERY'] == 0:
             worker.agent.save(log_dir=logger.main_path)
             tf.logging.info('Saved model at ep {}'.format(ep_stats['total_ep']))

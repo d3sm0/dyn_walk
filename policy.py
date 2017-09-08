@@ -44,7 +44,7 @@ class PolicyNetwork(object):
         self.entropy = self.pi.entropy()[0]
         self.sample = self.pi.sample()
 
-    def train_op(self , kl_target=0.003 , eta=1000 , lr=1e-4):
+    def train_op(self , kl_target=1e-3 , eta=1000 , lr=1e-4):
         # # alternative loss from baseline ppo
         # # #
         #
@@ -69,5 +69,8 @@ class PolicyNetwork(object):
 
     def get_grads(self):
         return tf.gradients(self.loss , self._params)
+
+    def get_tensor_to_summarize(self):
+        return self._params + [self.loss, self.kl, self.entropy] + [self.obs, self.acts, self.adv] + self.get_grads()
 
 

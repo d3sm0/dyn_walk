@@ -1,4 +1,6 @@
 import numpy as np
+import pickle
+import os
 
 class Dataset(object):
     def __init__(self , data , batch_size=64 , shuffle=True):
@@ -8,6 +10,7 @@ class Dataset(object):
         self._next_id = 0
         self.batch_size = batch_size
         self.shuffle()
+
 
     def shuffle(self):
         perm = np.arange(self.n)
@@ -36,10 +39,13 @@ class Dataset(object):
 
 
 class Memory(object):
-    def __init__(self , obs_dim , act_dim , max_steps):
+    def __init__(self , obs_dim , act_dim , max_steps, main_path):
         self.max_steps = max_steps
         self.inits = (np.zeros((obs_dim ,)) , np.zeros((act_dim ,)))
+        os.makedirs(os.path.join(main_path , 'dataset'))
+        self.log_dir = os.path.join(main_path , 'dataset')
         self.reset()
+
 
     def reset(self):
         ob , act = self.inits
@@ -58,7 +64,7 @@ class Memory(object):
         self.vs[i] = v
         self.ds[i] = d
 
-    def release(self , v , done):
+    def release(self , v , done, t):
         m = {
             'obs': self.obs ,
             'acts': self.acts ,
@@ -67,15 +73,16 @@ class Memory(object):
             'v_next': v * (1 - done) ,
             'ds': self.ds
         }
+        self.save(m , t)
         # TODO is this needed?
-        self.reset()
+        # self.reset()
         return m
 
-
-    def save(self , m , file_dir):
+    def save(self , memory, time_steps):
+        file_name = 'dump_{}'.format(time_steps)
         try:
-            with open(file_dir , 'a') as f:
-                f.write(m)
+            with open(os.path.join(self.log_dir , file_name) , 'ab') as f:
+                pickle.dump(memory , f)
         except IOError:
-            print('Memory not saved')
             raise
+
