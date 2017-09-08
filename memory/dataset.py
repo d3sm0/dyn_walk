@@ -1,6 +1,5 @@
 import numpy as np
 
-
 class Dataset(object):
     def __init__(self , data , batch_size=64 , shuffle=True):
         self.data = data
@@ -12,7 +11,8 @@ class Dataset(object):
 
     def shuffle(self):
         perm = np.arange(self.n)
-        for key in self.data:
+        np.random.shuffle(perm)
+        for key in self.data.keys():
             self.data[key] = self.data[key][perm]
         self._next_id = 0
 
@@ -24,7 +24,7 @@ class Dataset(object):
         curr_batch_size = min(self.batch_size , self.n - self._next_id)
         self._next_id += curr_batch_size
         data = dict()
-        for key in self.data:
+        for key in self.data.keys():
             data[key] = self.data[key][curr_id:curr_id + curr_batch_size]
         return data
 
@@ -51,12 +51,12 @@ class Memory(object):
 
     def collect(self , step , t):
         ob , act , r , d , v = step
-        t = t % self.max_steps
-        self.obs[t] = ob
-        self.acts[t] = act
-        self.rws[t] = r
-        self.vs[t] = v
-        self.ds[t] = d
+        i = t % self.max_steps
+        self.obs[i] = ob
+        self.acts[i] = act
+        self.rws[i] = r
+        self.vs[i] = v
+        self.ds[i] = d
 
     def release(self , v , done):
         m = {
@@ -67,8 +67,10 @@ class Memory(object):
             'v_next': v * (1 - done) ,
             'ds': self.ds
         }
-
+        # TODO is this needed?
+        self.reset()
         return m
+
 
     def save(self , m , file_dir):
         try:

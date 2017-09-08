@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from utils.tf_utils import fc
+from utils.tf_utils import fc, get_params
 
 
 class ValueNetwork(object):
@@ -10,10 +10,10 @@ class ValueNetwork(object):
         with tf.variable_scope(name):
             self.init_ph(obs_dim)
             self.init_network(h_size , act)
-            self._params = self.get_params()
+            self._params = get_params(name)
             self.train_op()
 
-    def train_op(self , lr=1e-4):
+    def train_op(self , lr=1e-3):
         # loss_1 = tf.square(self.vf - self.tdl)
         #
         # v_clipped = self.value_old + tf.clip_by_value(self.vf - self.value_old , -0.2 , 0.2)
@@ -21,14 +21,14 @@ class ValueNetwork(object):
         # self.loss = .5 * tf.reduce_mean(
         #     tf.maximum(loss_1 , loss_2))  # we do the same clipping-based trust region for the value function
         # print('Using trust region for VF')
-        self.loss = tf.reduce_mean(tf.square(self.vf - self.tdl) , name='value_loss')
-        self.train = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.loss, var_list=self._params)
 
-    def get_params(self):
-        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
+        self.loss = .5 * tf.reduce_mean(tf.square(self.vf - self.tdl) , name='value_loss')
+        opt = tf.train.AdamOptimizer(learning_rate=lr)
+        self.train = opt.minimize(self.loss , var_list=self._params)
+
 
     def get_grads(self):
-        return tf.gradients(self.vf , self.get_params())
+        return tf.gradients(self.vf , self._params)
 
     def init_ph(self , obs_dim):
         self.obs = tf.placeholder('float32' , shape=(None , obs_dim) , name='state')
@@ -38,6 +38,6 @@ class ValueNetwork(object):
     def init_network(self , h_size=(128 , 64 , 32) , act=tf.nn.tanh):
         h = act(fc(self.obs , h_size[0] , name='input'))
         for i in range(len(h_size)):
-            h = act(fc(h , h_size[i] , name='h{}'.format(i)))
+            h = fc(h , h_size[i] , act=act, name='h{}'.format(i))
         vf = fc(h , 1 , 'vf')
         self.vf = tf.squeeze(vf)

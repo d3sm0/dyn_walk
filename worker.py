@@ -3,7 +3,6 @@ import tensorflow as tf
 from agent import Agent
 import numpy as np
 from memory.dataset import Memory
-from collections import deque
 
 
 class Worker(object):
@@ -14,7 +13,7 @@ class Worker(object):
                            beta=config['BETA'] , h_size=config['H_SIZE'])
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
-        self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS'])
+        self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS_BATCH'])
         self.writer = tf.summary.FileWriter(logdir=log_dir)
 
     def warmup(self , ob_filter=None , max_steps=256 , ep=1):
@@ -30,6 +29,7 @@ class Worker(object):
         tf.logging.info('Warmup ended')
 
     def compute_target(self , seq):
+
         # TODO not sure why using the tdl estimator instead of the discounted sum of rewards
         dones = np.append(seq['ds'] , 0)
         v_hat = np.append(seq['vs'] , seq['v_next'])
@@ -43,9 +43,12 @@ class Worker(object):
             delta = rws[t] + self.gamma * v_hat[t + 1] * not_terminal - v_hat[t]
             gae[t] = last_gae = delta + self.gamma * self.lam * not_terminal * last_gae
         seq['tdl'] = seq['adv'] + seq['vs']
-        # seq['tdl'] = discount(rws , self.gamma)
-        # standardized advantage function
-        seq['adv'] = (seq['adv'] - seq['adv'].mean()) / seq['adv'].std()
+        batch = seq.copy()
+        # TODO can i compute the advatnage like this or should i use a variable and then reassign it?
+        # standardize advantage. Should not change the element in seq
+        batch['adv']= (batch['adv']- batch['adv'].mean()) / batch['adv'].std()
+        return batch
+
 
     @staticmethod
     def init_environment(config):
@@ -77,7 +80,8 @@ class Worker(object):
     def unroll(self , max_steps=2048 , ob_filter=None):
         ob = self.env.reset()
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
-        ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
+        # TODO save only last 10 episodes using deque
+        ep_rws , ep_ls = [],[]
         while True:
 
             if ob_filter: ob = ob_filter(ob)
@@ -86,39 +90,42 @@ class Worker(object):
 
             if t > 0 and t % max_steps == 0:
                 yield self.memory.release(v=v , done=done) , self.compute_summary(ep_rws , ep_ls , ep , t)
-                ep_rws.clear()
-                ep_ls.clear()
+                ep_rws = []
+                ep_ls = []
             ob1 , r , done , _ = self.env.step(act)
-            self.memory.collect((ob , act , r , done , v) , t)
-            ob = ob1.copy()
+            # TODO do i need to deep copy here?
+            self.memory.collect((ob.copy() , act , r , done , v) , t)
+            ob = ob1
 
             ep_l += 1
             ep_r += r
             if done:
                 ep += 1
-                ob = self.env.reset()
                 ep_rws.append(ep_r)
                 ep_ls.append(ep_l)
                 ep_r =0
                 ep_l = 0
+                ob = self.env.reset()
             t += 1
+
 
     def compute_summary(self , *stats):
         ep_rws , ep_ls , ep , t = stats
 
         ep_stats = {
-            'rw': ep_rws[-1] ,
-            'len': ep_ls[-1] ,
+            'last_ep_rw': ep_rws[-1] ,
+            'last_ep_len': ep_ls[-1] ,
             'avg_rw': np.array(ep_rws).mean() ,
             'avg_len': np.array(ep_ls).mean() ,
-            't': t ,
-            'ep': ep
+            'total_steps': t ,
+            'total_ep': ep,
         }
         return ep_stats
 
 
     def write_summary(self, stats, ep):
         ep_summary = tf.Summary()
+
         for (k,v) in stats.iteritems():
             ep_summary.value.add(simple_value = v, tag = k)
 

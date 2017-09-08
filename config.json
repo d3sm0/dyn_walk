@@ -6,23 +6,16 @@
   "NORMALIZE": true,
   "MEMORY_SIZE": 1000000,
   "BATCH_SIZE": 64,
-  "NUM_ITER": 20,
-  "EPS": [
-    2.0,
-    2.0
-  ],
+  "NUM_ITER": 10,
+  "EPS": [2.0, 2.0],
   "GAMMA": 0.99,
   "LAMBDA": 0.95,
-  "MAX_EP": 20000,
-  "MAX_STEPS": 2048,
+  "MAX_STEPS":1000000,
+  "MAX_STEPS_BATCH": 2048,
   "KL_TARGET": 0.01,
-  "ETA": 50,
+  "ETA": 1000,
   "BETA": 1.0,
-  "H_SIZE": [
-    128,
-    64,
-    32
-  ],
+  "H_SIZE": [128,64,32],
   "SAVE_EVERY": 32768,
   "REPORT_EVERY": 4096
 }

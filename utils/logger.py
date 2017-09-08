@@ -52,9 +52,10 @@ class Logger(object):
     @staticmethod
     def disp(log):
         """Print metrics to stdout"""
+
         log_keys = [k for k in log.keys()]
         log_keys.sort()
-        print('***** Episode {} *****'.format(log['ep']))
+        print('***** Episode {} *****'.format(log['total_ep']))
         for key in log_keys:
             # if key[0] != '_':  # don't display log items with leading '_'
             print('{:s}: {:.3g}'.format(key, log[key]))

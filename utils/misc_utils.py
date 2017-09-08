@@ -36,3 +36,9 @@ def discount(x, gamma):
     """
     assert x.ndim >= 1
     return lfilter([1],[1,-gamma],x[::-1], axis=0)[::-1]
+
+def merge_dicts(x, y):
+    """Given two dicts, merge them into a new dict as a shallow copy."""
+    z = x.copy()
+    z.update(y)
+    return z
