@@ -1,5 +1,5 @@
 {
-  "ENV_NAME": "Walker2d-v1",
+  "ENV_NAME": "osim",
   "CONCATENATE_FRAMES": 3,
   "FRAME_RATE": 50,
   "USE_RW": false,
