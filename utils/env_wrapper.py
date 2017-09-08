@@ -26,7 +26,7 @@ class Environment(RunEnv):
         return self.observation_space , self.action_space , self.bound
 
     # def reset(self, difficulty=0):
-    def reset(self , difficulty=2 , seed=None):
+    def reset(self , difficulty=3 , seed=None):
         state = super(Environment , self).reset(difficulty , seed)
 
         states = np.tile(state , self.concat)
