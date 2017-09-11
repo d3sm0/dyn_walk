@@ -9,7 +9,7 @@ class Dataset(object):
         self.n = next(iter(data.values())).shape[0]
         self._next_id = 0
         self.batch_size = batch_size
-        self.shuffle()
+        if self.enable_shuffle: self.shuffle()
 
 
     def shuffle(self):

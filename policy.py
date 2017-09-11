@@ -1,5 +1,4 @@
 import tensorflow as tf
-
 from utils.tf_utils import fc, GaussianPD, get_params
 
 
@@ -14,6 +13,7 @@ class PolicyNetwork(object):
             self._params = get_params(name)
             self._init_pi(act_dim)
             self.losses = self.train_op(kl_target , eta)
+            self.summarize = self.get_tensor_to_summarize()
 
 
     def _init_ph(self , obs_dim , act_dim):
@@ -27,6 +27,7 @@ class PolicyNetwork(object):
 
     def _init_network(self , act_dim , h_size=(128 , 64 , 32) , act=tf.tanh):
         h = fc(self.obs , h_size[0] , act = act, name='input')
+
         for i in range(len(h_size)):
             h = fc(h , h_size[i] ,act = act, name='h{}'.format(i))
 
@@ -41,7 +42,7 @@ class PolicyNetwork(object):
         # # compute D_KL [pi_old || pi]
         self.kl = tf.reduce_mean(self.pi_old.kl(self.pi))
 
-        self.entropy = self.pi.entropy()[0]
+        self.entropy = tf.squeeze(self.pi.entropy(),name='entropy')
         self.sample = self.pi.sample()
 
     def train_op(self , kl_target=1e-3 , eta=1000 , lr=1e-4):
@@ -68,7 +69,7 @@ class PolicyNetwork(object):
 
 
     def get_grads(self):
-        return tf.gradients(self.loss , self._params)
+        return tf.gradients(self.loss , self._params, name = 'policy_gradients')
 
     def get_tensor_to_summarize(self):
         return self._params + [self.loss, self.kl, self.entropy] + [self.obs, self.acts, self.adv] + self.get_grads()

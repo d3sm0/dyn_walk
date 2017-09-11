@@ -1,5 +1,7 @@
 from utils.env_wrapper import Environment
 import tensorflow as tf
+from collections import deque
+import os
 from agent import Agent
 import numpy as np
 from memory.dataset import Memory
@@ -18,6 +20,10 @@ class Worker(object):
                              main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
+
+        if config['LAST_RUN'] != False:
+            load_path = os.path.join(os.getcwd(), 'log-files', config['ENV_NAME'], config['LAST_RUN'])
+            self.agent.load(load_path)
 
     def warmup(self , ob_filter=None , max_steps=64 , ep=1):
         for e in range(ep):
@@ -99,7 +105,7 @@ class Worker(object):
         ob = self.env.reset()
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
         # TODO save only last 10 episodes using deque
-        ep_rws , ep_ls = [] , []
+        ep_rws , ep_ls = deque(maxlen = 10), deque(maxlen = 10)
         while True:
 
             if ob_filter: ob = ob_filter(ob)
@@ -107,7 +113,7 @@ class Worker(object):
             act , v = self.agent.get_action_value(ob)
 
             if t > 0 and t % max_steps == 0:
-                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_rws , ep_ls , ep , t)
+                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_l,ep_r,ep_rws , ep_ls , ep , t)
                 ep_rws = []
                 ep_ls = []
             ob1 , r , done , _ = self.env.step(act)
@@ -125,13 +131,13 @@ class Worker(object):
                 ep_l = 0
                 ob = self.env.reset()
             t += 1
-
-    def compute_summary(self , *stats):
-        ep_rws , ep_ls , ep , t = stats
+    @staticmethod
+    def compute_summary(*stats):
+        ep_l,ep_r, ep_rws , ep_ls , ep , t = stats
 
         ep_stats = {
-            'last_ep_rw': ep_rws[-1] ,
-            'last_ep_len': ep_ls[-1] ,
+            'last_ep_rw': ep_r,
+            'last_ep_len': ep_l,
             'avg_rw': np.array(ep_rws).mean() ,
             'avg_len': np.array(ep_ls).mean() ,
             'total_steps': t ,
@@ -142,11 +148,11 @@ class Worker(object):
     def write_summary(self , stats , ep , network_stats=None):
 
         for (k , v) in stats.iteritems():
-            if np.ndim(v) > 1:
-                self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
-                self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
-                self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
-            else:
+            # if np.ndim(v) > 1:
+            #     self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
+            #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
+            #     self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
+            # else:
                 self.ep_summary.value.add(simple_value=v , tag=k)
         if network_stats is not None:
             self.writer.add_summary(network_stats , ep)

@@ -13,7 +13,11 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 # TODO check for topology (256, 128,64, 32) (256,128,64)
 
+
+
 def main(config):
+
+
     logger = Logger(env_name=config['ENV_NAME'])
     logger.save_experiment(config)
     worker = Worker(config , log_dir=logger.main_path)
@@ -51,12 +55,12 @@ def play(worker , config , logger=None , ob_filter=None):
         # dataset = Dataset(dict(obs=obs , acts=acts , adv=obs , tdl=tdl ,
         #                        vs=vs) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
-        train_stats,_ = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
+        train_stats, network_stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
 
         logger.log(merge_dicts(train_stats , ep_stats))
-        if t % config['REPORT_EVERY'] == 0:
-            logger.write(display=True)
-            worker.write_summary(merge_dicts(ep_stats , train_stats) , ep_stats['total_ep'] , network_stats=None)
+        # if t % config['REPORT_EVERY'] == 0:
+        logger.write(display=True)
+        worker.write_summary(merge_dicts(ep_stats , train_stats) , ep_stats['total_ep'] , network_stats=network_stats)
         if t % config['SAVE_EVERY'] == 0:
             worker.agent.save(log_dir=logger.main_path)
             tf.logging.info('Saved model at ep {}'.format(ep_stats['total_ep']))

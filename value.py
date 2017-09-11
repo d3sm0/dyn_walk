@@ -12,6 +12,7 @@ class ValueNetwork(object):
             self.init_network(h_size , act)
             self._params = get_params(name)
             self.train_op()
+            self.summarize = self.get_tensor_to_summarize()
 
     def train_op(self , lr=1e-3):
         # loss_1 = tf.square(self.vf - self.tdl)
@@ -28,7 +29,7 @@ class ValueNetwork(object):
 
 
     def get_grads(self):
-        return tf.gradients(self.vf , self._params)
+        return tf.gradients(self.vf , self._params, name = 'value_gradient')
 
     def init_ph(self , obs_dim):
         self.obs = tf.placeholder('float32' , shape=(None , obs_dim) , name='state')

@@ -14,7 +14,10 @@ class Logger(object):
         now = datetime.utcnow().strftime("%b-%d_%H_%M")  # create unique dir
 
         self.main_path = os.path.join('log-files', env_name, now)
-        os.makedirs(self.main_path)
+        try:
+            os.makedirs(self.main_path)
+        except OSError:
+            pass
         # filenames = glob.glob('*.py')  # put copy of all python files in log_dir
         # for filename in filenames:     # for reference
         #     shutil.copy(filename, path)
