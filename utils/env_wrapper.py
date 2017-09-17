@@ -6,7 +6,7 @@ from collections import deque
 
 class Environment(RunEnv):
     def __init__(self , frame_rate=50 , concat=3 , augment_rw=False , normalize=True):
-        super(Environment , self).__init__(visualize=False , max_obstacles=3)
+        super(Environment , self).__init__(visualize=True , max_obstacles=3)
         self.frame_rate = frame_rate
         self.observation_space = (self.observation_space.shape[0] * concat) + 7
         self.sample = self.action_space.sample

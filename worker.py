@@ -109,7 +109,6 @@ class Worker(object):
         while True:
 
             if ob_filter: ob = ob_filter(ob)
-
             act , v = self.agent.get_action_value(ob)
 
             if t > 0 and t % max_steps == 0:

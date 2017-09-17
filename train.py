@@ -1,3 +1,4 @@
+
 import tensorflow as tf
 import json
 
@@ -8,6 +9,7 @@ from utils.misc_utils import merge_dicts
 from utils.running_stats import ZFilter
 
 from worker import Worker
+
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
