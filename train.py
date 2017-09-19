@@ -31,7 +31,7 @@ def main(config):
 
 
 def play(worker , config , logger=None , ob_filter=None):
-    worker.warmup(ob_filter , max_steps=config['WARMUP_TIME'])
+    # worker.warmup(ob_filter , max_steps=config['WARMUP_TIME'])
 
     seq_gen = worker.unroll(ob_filter=ob_filter , max_steps=config['MAX_STEPS_BATCH'])
 
@@ -46,9 +46,7 @@ def play(worker , config , logger=None , ob_filter=None):
         dataset = Dataset(dict(obs=batch['obs'] , acts=batch['acts'] , adv=batch['adv'] , tdl=batch['tdl'] ,
                                vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
-        tf.logging.info(('pi_lr' , worker.agent.policy.opt._lr , 'vf_lr' , worker.agent.value.opt._lr))
-
-        train_stats, network_stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'], lr = lr)
+        train_stats, network_stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
 
 
         logger.log(merge_dicts(train_stats , ep_stats))
