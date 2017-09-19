@@ -1,16 +1,20 @@
+"""
+Manuel approved :)
+"""
+
 import numpy as np
 import pickle
 import os
+
 
 class Dataset(object):
     def __init__(self , data , batch_size=64 , shuffle=True):
         self.data = data
         self.enable_shuffle = True
-        self.n = next(iter(data.values())).shape[0]
+        self.n = data.values()[0].shape[0]
         self._next_id = 0
         self.batch_size = batch_size
         if self.enable_shuffle: self.shuffle()
-
 
     def shuffle(self):
         perm = np.arange(self.n)
@@ -39,13 +43,15 @@ class Dataset(object):
 
 
 class Memory(object):
-    def __init__(self , obs_dim , act_dim , max_steps, main_path):
+    def __init__(self , obs_dim , act_dim , max_steps , main_path):
         self.max_steps = max_steps
         self.inits = (np.zeros((obs_dim ,)) , np.zeros((act_dim ,)))
-        os.makedirs(os.path.join(main_path , 'dataset'))
+        try:
+            os.makedirs(os.path.join(main_path , 'dataset'))
+        except OSError:
+            print('Error in saving data, folder not found')
         self.log_dir = os.path.join(main_path , 'dataset')
         self.reset()
-
 
     def reset(self):
         ob , act = self.inits
@@ -64,7 +70,7 @@ class Memory(object):
         self.vs[i] = v
         self.ds[i] = d
 
-    def release(self , v , done, t):
+    def release(self , v , done , t):
         m = {
             'obs': self.obs ,
             'acts': self.acts ,
@@ -74,15 +80,12 @@ class Memory(object):
             'ds': self.ds
         }
         self.save(m , t)
-        # TODO is this needed?
-        # self.reset()
         return m
 
-    def save(self , memory, time_steps):
+    def save(self , memory , time_steps):
         file_name = 'dump_{}'.format(time_steps)
         try:
-            with open(os.path.join(self.log_dir , file_name) , 'ab') as f:
+            with open(os.path.join(self.log_dir , file_name) , 'wb') as f:
                 pickle.dump(memory , f)
-        except IOError:
-            raise
-
+        except IOError as e:
+            print('error' , e)

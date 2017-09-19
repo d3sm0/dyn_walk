@@ -12,9 +12,9 @@ class Agent(object):
     def __init__(self , obs_dim , act_dim , kl_target=1e-2 , eta=1000 , beta=1.0 , h_size=(128 , 64 , 32)):
 
         self.policy = PolicyNetwork(name='pi' , obs_dim=obs_dim , act_dim=act_dim , eta=eta ,
-                                    h_size=h_size , kl_target=kl_target)
+                                    h_size=h_size , kl_target=kl_target, act = tf.nn.elu)
 
-        self.value = ValueNetwork(name='vf' , obs_dim=obs_dim , h_size=h_size)
+        self.value = ValueNetwork(name='vf' , obs_dim=obs_dim , h_size=h_size, act = tf.nn.elu)
         self.kl_target = kl_target
         self.beta = beta
         self.lr_multiplier = 1.0

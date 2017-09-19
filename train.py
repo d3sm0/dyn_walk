@@ -16,7 +16,6 @@ tf.logging.set_verbosity(tf.logging.INFO)
 # TODO check for topology (256, 128,64, 32) (256,128,64)
 
 
-
 def main(config):
 
 
@@ -43,19 +42,9 @@ def play(worker , config , logger=None , ob_filter=None):
         sequence , ep_stats = next(seq_gen)
 
         batch = worker.compute_target(sequence)
-        # # TODO check here how to update properly. Batch is a deep copy of sequence
-        # obs , acts , adv , tdl , vs = batch['obs'] , batch['acts'] , batch['adv'] , batch['tdl'] , batch['vs']
-        # adv = (adv - adv.mean()) / adv.std()
-        # # b = Dataset(dict(obs=batch['obs'] , acts=batch['acts'], adv=adv, tdl=batch['tdl'] ,
-        # #                  vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
-        # obs, acts, adv, tdl, vs = batch['obs'], batch['acts'], batch['adv'], batch['tdl'], batch['vs']
-        #
         dataset = Dataset(dict(obs=batch['obs'] , acts=batch['acts'] , adv=batch['adv'] , tdl=batch['tdl'] ,
                                vs=batch['vs']) , batch_size=config['BATCH_SIZE'] , shuffle=True)
-
-        # dataset = Dataset(dict(obs=obs , acts=acts , adv=obs , tdl=tdl ,
-        #                        vs=vs) , batch_size=config['BATCH_SIZE'] , shuffle=True)
 
         train_stats, network_stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
 
