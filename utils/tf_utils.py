@@ -1,6 +1,10 @@
 import numpy as np
 import tensorflow as tf
 
+
+def lrelu(x, alpha = 0.1):
+  return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
+
 def ortho_init(scale=1.0):
     def _ortho_init(shape, dtype, partition_info=None):
         #lasagne ortho init for tf
