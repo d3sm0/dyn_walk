@@ -12,9 +12,9 @@ class Agent(object):
     def __init__(self , obs_dim , act_dim , kl_target=1e-2 , eta=1000 , beta=1.0 , h_size=(128 , 64 , 32)):
 
         self.policy = PolicyNetwork(name='pi' , obs_dim=obs_dim , act_dim=act_dim , eta=eta ,
-                                    h_size=h_size , kl_target=kl_target, act = lrelu)
+                                    h_size=h_size , kl_target=kl_target, act =tf.nn.elu)
 
-        self.value = ValueNetwork(name='vf' , obs_dim=obs_dim , h_size=h_size, act = lrelu)
+        self.value = ValueNetwork(name='vf' , obs_dim=obs_dim , h_size=h_size, act = tf.nn.elu)
         self.kl_target = kl_target
         self.beta = beta
         self.lr_multiplier = 1.0
@@ -76,7 +76,6 @@ class Agent(object):
                              self.policy.mu_old: batch['mu_old'] ,
                              self.policy.logstd_old: logstd_old ,
                              self.policy.beta: self.beta ,
-                             # self.policy.lr: self.lr_multiplier * lr,
                                  }
 
                 policy_loss , kl , entropy , _ = self.sess.run(
@@ -156,7 +155,7 @@ class Agent(object):
         elif kl < self.kl_target / eps[1]:
             self.beta = np.maximum(1 / 35 , self.beta / alpha)
             if self.beta < (1 / 30) and self.lr_multiplier < 10:
-                self.lr_multiplier *= alpha
+                self.lr_multiplier *= alpha*.9
                 # tf.logging.info('KL too low, decreasing penalty coefficient. Next Beta {}, lr {}'.format(self.beta ,
                 # self.lr_multiplier))
         else:
@@ -165,35 +164,3 @@ class Agent(object):
 
     def close_session(self):
         self.sess.close()
-
-    @staticmethod
-    def summarize_tensors(tensor_list):
-        summary_op = []
-        for tensor in tensor_list:
-            if tensor.get_shape().ndims != 0:
-                mean , var = tf.nn.moments(tensor , axes=[0], keep_dims=True)
-
-                summary_op.append(tf.summary.histogram(name=tensor.name.replace(':' , '_') , values=tensor))
-
-                summary_op.append(
-                    tf.summary.histogram(name=tensor.name.replace(':' , '_') + '/mean' , values=mean))
-                summary_op.append(
-                    tf.summary.histogram(name=tensor.name.replace(':' , '_') + '/var' , values=var))
-
-                # summary_op.append(tf.summary.histogram(name=tensor.name.replace(':' , '_') + '/batch/max' ,
-                #                                        values=tf.reduce_max(input_tensor=tensor , axis=[1])))
-                # summary_op.append(tf.summary.histogram(name=tensor.name.replace(':' , '_') + '/batch/min' ,
-                #                                        values=tf.reduce_min(input_tensor=tensor , axis=[1])))
-                # summary_op.append(
-                #     tf.summary.scalar(name=tensor.name.replace(':' , '_') + '/mean' , tensor=mean))
-                # summary_op.append(
-                #     tf.summary.scalar(name=tensor.name.replace(':' , '_') + '/var' , tensor=var))
-                # summary_op.append(tf.summary.scalar(name=tensor.name.replace(':' , '_') + '/max' ,
-                #                                     tensor=tf.reduce_max(input_tensor=tensor , axis=[0 , 1])))
-                # summary_op.append(tf.summary.scalar(name=tensor.name.replace(':' , '_') + '/min' ,
-                #                                     tensor=tf.reduce_min(input_tensor=tensor , axis=[0 , 1])))
-            else:
-
-                summary_op.append(tf.summary.scalar(name=tensor.name.replace(':' , '_'), tensor=tensor))
-        return tf.summary.merge_all()
-
