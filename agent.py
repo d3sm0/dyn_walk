@@ -67,9 +67,9 @@ class Agent(object):
         dataset.data['mu_old'] , logstd_old = self.get_pi(dataset.data['obs'])
 
         # TODO can i merge the following iters in an efficient way? If so we num_iter can go to 20 instead of 10
-
+        import time
+        start = time.time()
         for i in range(num_iter):
-
             for batch in dataset.iterate_once():
                 feed_dict = {self.policy.obs: batch['obs'] , self.policy.adv: batch['adv'] ,
                              self.policy.acts: batch['acts'] ,
@@ -82,24 +82,26 @@ class Agent(object):
                 policy_loss , kl , entropy , _ = self.sess.run(
                     [self.policy.loss , self.policy.kl , self.policy.entropy , self.policy.train] ,
                     feed_dict=feed_dict)
+                i+=1
 
             if kl > 4 * self.kl_target:
                 tf.logging.info('KL too high. Stopping update after {}'.format(i))
                 self.early_stop += 1
                 break
+        print('t1' , (time.time() - start) / (num_iter))
             # feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl'] ,
             #                                       self.value.value_old: batch['vs']}
             #     value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
             # #
 
-
+        start = time.time()
         for i in range(num_iter):
             for batch in dataset.iterate_once():
                 feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl'] ,
                              # self.value.value_old: batch['vs']
                              }
                 value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
-
+        print('t2',(time.time() - start) / (num_iter))
         self.update_beta(kl , eps=eps)
 
         stats = {
@@ -165,6 +167,17 @@ class Agent(object):
 
     def close_session(self):
         self.sess.close()
+
+    def sync(self, old, new):
+        self.sess.run(self.update_pi(old, new))
+
+    @staticmethod
+    def update_pi(old, new, tau=0.01):
+        params = []
+        for o, n in zip(old, new):
+            params.append(tf.assign(n, tf.multiply(n , tau) + tf.multiply(o , 1. - tau)))
+
+        return params
 
     @staticmethod
     def summarize_tensors(tensor_list):

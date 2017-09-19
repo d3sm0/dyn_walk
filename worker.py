@@ -5,15 +5,21 @@ import os
 from agent import Agent
 import numpy as np
 from memory.dataset import Memory
+from img import Imagine
 
 
 class Worker(object):
     def __init__(self , config , log_dir):
+        self.imagine = False
+
         self.env , self.env_dim , split_obs = self.init_environment(config)
 
         self.agent = Agent(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , kl_target=config['KL_TARGET'] ,
                            eta=config['ETA'] ,
                            beta=config['BETA'] , h_size=config['H_SIZE'])
+
+        self.img = Imagine(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1])
+
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
         self.memory = Memory(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS_BATCH'] ,
@@ -22,7 +28,7 @@ class Worker(object):
         self.ep_summary = tf.Summary()
 
         if config['LAST_RUN'] != False:
-            load_path = os.path.join(os.getcwd(), 'log-files', config['ENV_NAME'], config['LAST_RUN'])
+            load_path = os.path.join(os.getcwd() , 'log-files' , config['ENV_NAME'] , config['LAST_RUN'])
             self.agent.load(load_path)
 
     def warmup(self , ob_filter=None , max_steps=64 , ep=1):
@@ -103,19 +109,26 @@ class Worker(object):
 
     def unroll(self , max_steps=2048 , ob_filter=None):
         ob = self.env.reset()
+        self.img.reset(ob)
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
         # TODO save only last 10 episodes using deque
-        ep_rws , ep_ls = deque(maxlen = 10), deque(maxlen = 10)
+        ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
         while True:
 
             if ob_filter: ob = ob_filter(ob)
             act , v = self.agent.get_action_value(ob)
 
             if t > 0 and t % max_steps == 0:
-                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_l,ep_r,ep_rws , ep_ls , ep , t)
+                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_l , ep_r , ep_rws , ep_ls ,
+                                                                                        ep , t)
                 ep_rws = []
                 ep_ls = []
-            ob1 , r , done , _ = self.env.step(act)
+
+            if self.imagine:
+                ob1 , r , done , _ = self.img.step(act)
+            else:
+                ob1 , r , done , _ = self.env.step(act)
+                self.img.collect(ob, act, ob1)
             # TODO do i need to deep copy here?
             self.memory.collect((ob.copy() , act , r , done , v) , t)
             ob = ob1
@@ -130,13 +143,14 @@ class Worker(object):
                 ep_l = 0
                 ob = self.env.reset()
             t += 1
+
     @staticmethod
     def compute_summary(*stats):
-        ep_l,ep_r, ep_rws , ep_ls , ep , t = stats
+        ep_l , ep_r , ep_rws , ep_ls , ep , t = stats
 
         ep_stats = {
-            'last_ep_rw': ep_r,
-            'last_ep_len': ep_l,
+            'last_ep_rw': ep_r ,
+            'last_ep_len': ep_l ,
             'avg_rw': np.array(ep_rws).mean() ,
             'avg_len': np.array(ep_ls).mean() ,
             'total_steps': t ,
@@ -152,7 +166,7 @@ class Worker(object):
             #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
             #     self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
             # else:
-                self.ep_summary.value.add(simple_value=v , tag=k)
+            self.ep_summary.value.add(simple_value=v , tag=k)
         if network_stats is not None:
             self.writer.add_summary(network_stats , ep)
         self.writer.add_summary(self.ep_summary , ep)
