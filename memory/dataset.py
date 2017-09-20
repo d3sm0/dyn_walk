@@ -10,8 +10,8 @@ import os
 class Dataset(object):
     def __init__(self , data , batch_size=64 , shuffle=True):
         self.data = data
-        self.enable_shuffle = True
-        self.n = data.values()[0].shape[0]
+        self.enable_shuffle = shuffle
+        self.n = next(iter(data.values())).shape[0]
         self._next_id = 0
         self.batch_size = batch_size
         if self.enable_shuffle: self.shuffle()
