@@ -113,6 +113,7 @@ class Worker(object):
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
         # TODO save only last 10 episodes using deque
         ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
+        state_in = [np.zeros((1, 64)),np.zeros((1, 64))]
         while True:
 
             if ob_filter: ob = ob_filter(ob)
@@ -124,10 +125,14 @@ class Worker(object):
                 ep_rws = []
                 ep_ls = []
 
-            if self.imagine:
-                ob1 , r , done , _ = self.img.step(act)
-            else:
+
+            if not self.imagine:
                 ob1 , r , done , _ = self.env.step(act)
+
+            else:
+                for _ in range(3):
+                    ob1 , _ , _ , _ , state_out = self.img.step(act , state_in)
+
                 self.img.collect(ob, act, ob1)
             # TODO do i need to deep copy here?
             self.memory.collect((ob.copy() , act , r , done , v) , t)
