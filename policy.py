@@ -1,5 +1,5 @@
 import tensorflow as tf
-from utils.tf_utils import fc , GaussianPD , get_params
+from utils.tf_utils import fc , GaussianPD , get_params , _clip_grad
 
 
 class PolicyNetwork(object):
@@ -59,8 +59,11 @@ class PolicyNetwork(object):
         loss_2 = tf.multiply(self.beta , self.kl)
         loss_3 = eta * tf.square(tf.maximum(0.0 , self.kl - 2.0 * kl_target))
         self.loss = loss_1 + loss_3 + loss_2
+
+        gvs = _clip_grad(self.loss , self._params)
         opt = tf.train.AdamOptimizer(learning_rate=lr)
-        self.train = opt.minimize(self.loss , var_list=self._params)
+
+        self.train = opt.apply_gradients(gvs)
         return (loss_1 , loss_2 , loss_3)
 
     def get_grads(self):

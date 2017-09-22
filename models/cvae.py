@@ -1,13 +1,14 @@
 import tensorflow as tf
 from tensorflow.contrib.layers import summarize_tensors
-import numpy as np
-from networks import encoder , decoder
+
+from utils.tf_utils import fc
+from models.networks import encoder , decoder
 
 
 class VAE:
-    def __init__(self , obs_dim , acts_dim , latent_dim , batch_size):
+    def __init__(self , obs_dim , acts_dim , z_dim , batch_size):
         """
-        Implementation of Variational Autoencoder (VAE) for  MNIST.
+        Implementation of Variational Autoencoder (VAE) for  MNIST.`
         Paper (Kingma & Welling): https://arxiv.org/abs/1312.6114.
 
         :param latent_dim: Dimension of latent space.
@@ -17,7 +18,7 @@ class VAE:
         :param decoder: function which decodes a batch of samples from
             the latent space and returns the corresponding batch of images.
         """
-        self.z_dim = latent_dim
+        self.z_dim = z_dim
         self.batch_size = batch_size
         self.obs_dim = obs_dim
         self.acts_dim = acts_dim
@@ -26,7 +27,9 @@ class VAE:
         self._build_graph()
         self._train_op()
         # start tensorflow session
+
         self.sess = tf.Session()
+        self.saver = tf.train.Saver(var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES , scope='vae'))
         self.sess.run(tf.global_variables_initializer())
         self.summary = tf.summary.merge(summarize_tensors([self.loss , self.kl , self.z , self.mean , self.sd]))
 
@@ -34,6 +37,12 @@ class VAE:
         self.obs = tf.placeholder(tf.float32 , shape=[None , self.obs_dim])
         self.obs1 = tf.placeholder(tf.float32 , shape=[None , self.obs_dim])
         self.acts = tf.placeholder(tf.float32 , shape=[None , self.acts_dim])
+
+    def _preprocess(self , act=tf.nn.elu):
+        s = fc(self.obs , h_size=128 , act=tf.nn.elu , name='s')
+        a = fc(self.acts , h_size=128 , act=tf.nn.elu , name='a')
+        s1 = fc(self.obs1 , h_size=128 , act=tf.nn.elu , name='s1')
+        return s , a , s1
 
     def _sample(self):
         return self.mean + tf.random_normal(tf.shape(self.mean)) * self.sd
@@ -45,41 +54,27 @@ class VAE:
         z -> decode(z) -> distribution over x -> log likelihood ->
         total loss -> train step
         """
-        with tf.variable_scope('vae'):
-            # encode inputs (map to parameterization of diagonal Gaussian)
 
-            x = tf.concat((self.obs , self.acts , self.obs1) , axis=1)
+        with tf.variable_scope('vae'):
+            s , a , s1 = self._preprocess()
+            x = tf.concat((s , a) , axis=1)
+            # encode inputs (map to parameterization of diagonal Gaussian)
             self.mean , self.sd = encoder(x , self.z_dim)
             self.z = self._sample()
 
-            # with tf.variable_scope('sampling'):
-            #     self.mean = self.encoded
-            #     self.logvar = tf.get_variable('logvar' , shape=(1 , self.z_dim) , initializer=tf.zeros_initializer)
-            #
-            #     # also calculate standard deviation for practical use
-            #     self.stddev = tf.sqrt(tf.exp(self.logvar))
-            #
-            #     # sample from latent space
-            #     epsilon = tf.random_normal([self.batch_size , self.z_dim])
-            #     self.z = self.mean + self.stddev * epsilon
+            z = tf.concat((self.z , a) , axis=1)
 
-            # deecode batch
-
-            z = tf.concat((self.z , self.obs , self.acts) , axis=1)
-            # z = self.z
             self.decoded = decoder(z , self.obs_dim)
 
-            # calculate KL divergence between approximate posterior q and prior p
-
     def _train_op(self):
+        # calculate KL divergence between approximate posterior q and prior p
         kl = self.d_kl(self.mean , self.sd)
-        self.kl = tf.reduce_mean(kl)
+        self.kl = tf.reduce_mean(kl , name='kl')
 
-        log_lk = self.log_lik_bernoulli(self.obs , self.decoded)
+        log_lk = self.log_lik_bernoulli(self.obs1 , self.decoded)
+        self.loss = tf.reduce_mean(kl - log_lk , name='elbo')
 
-        self.loss = tf.reduce_mean(kl - log_lk)
-
-        self.train = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss)
+        self.optim = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss)
 
     @staticmethod
     def d_kl(mu , sigma , eps=1e-8):
@@ -110,6 +105,7 @@ class VAE:
         """
         log_like = tf.reduce_sum(targets * tf.log(outputs + eps)
                                  + (1. - targets) * tf.log((1. - outputs) + eps) , axis=1)
+
         return log_like
 
     def train(self , obs , acts , obs1):
@@ -120,7 +116,7 @@ class VAE:
         :param x: Mini batch of input data points.
         :return: loss: Total loss (KL + NLL) for mini batch.
         """
-        _ , loss = self.sess.run([self.train , self.loss] ,
+        _ , loss = self.sess.run([self.optim , self.loss] ,
                                  feed_dict={self.obs: obs ,
                                             self.acts: acts ,
                                             self.obs1: obs1})
@@ -136,9 +132,9 @@ class VAE:
         return self.sess.run([self.mean , self.sd] , feed_dict={self.obs: obs , self.acts: acts})
 
     def get_z(self , obs , acts):
-        return self.sess.run(self.z , feed_dict={self.obs , self.acts})
+        return self.sess.run(self.z , feed_dict={self.obs: obs , self.acts: acts})
 
-    def get_obs1(self , obs , acts):
+    def step(self , obs , acts):
         """
         Generate from the model a new point. Either given by the latent space or given by obs, ancd acts
 
@@ -146,6 +142,11 @@ class VAE:
         :return: x: Corresponding image generated from z.
         """
 
-        assert np.ndim(obs) > 1 and np.ndim(acts) > 1
+        return self.sess.run(self.decoded , feed_dict={self.obs: [obs] , self.acts: [acts]})
 
-        return self.sess.run(self.decoded , feed_dict={self.obs: obs , self.acts: acts})
+    def eval(self, obs, acts, obs1):
+        loss = self.sess.run(self.loss ,
+                                 feed_dict={self.obs: obs ,
+                                            self.acts: acts ,
+                                            self.obs1: obs1})
+        return loss

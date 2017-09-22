@@ -1,5 +1,13 @@
 import numpy as np
 import tensorflow as tf
+import os
+
+
+def _clip_grad(loss , vars , clip=50):
+    grads = tf.gradients(loss, vars)
+    #assert all(grads)  # make sure that there are no none in gradients
+    g , _ = tf.clip_by_global_norm(grads , clip)
+    return zip(g , vars)
 
 
 def fc(x , h_size , name , act=None , std=0.1):
@@ -42,3 +50,21 @@ class GaussianPD(object):
 
 def get_params(scope):
     return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES , scope=scope)
+
+
+def _save(saver , sess , log_dir):
+    try:
+        saver.save(sess=sess , save_path=os.path.join(log_dir , 'model.ckpt'))
+    except Exception as e:
+        tf.logging.error(e)
+        raise
+
+
+def _load(saver , sess , log_dir):
+    try:
+        ckpt = tf.train.latest_checkpoint(log_dir)
+        saver.restore(sess=sess , save_path=ckpt)
+        print('restored')
+    except Exception as e:
+        tf.logging.error(e)
+        pass

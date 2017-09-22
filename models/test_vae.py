@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from memory.dataset import Dataset
-from vae.cvae import VAE
+from models.cvae import VAE
 
 
 def main():

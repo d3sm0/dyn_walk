@@ -1,12 +1,12 @@
-from utils.env_wrapper import Environment
 import tensorflow as tf
 from collections import deque
 import os
 from agent import Agent
 import numpy as np
 from memory.dataset import Memory
-from img import Imagine
-
+from img import Imagination
+import six
+from utils.tf_utils import _load
 
 class Worker(object):
     def __init__(self , config , log_dir):
@@ -18,7 +18,7 @@ class Worker(object):
                            eta=config['ETA'] ,
                            beta=config['BETA'] , h_size=config['H_SIZE'])
 
-        self.img = Imagine(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1])
+        # self.imagination = Imagination(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1], z_dim=2)
 
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
@@ -26,9 +26,10 @@ class Worker(object):
                              main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
+        self.t = 0
 
         if config['LAST_RUN'] != False:
-            load_path = os.path.join(os.getcwd() , 'log-files' , config['ENV_NAME'] , config['LAST_RUN'])
+            load_path = os.path.join(os.getcwd() , 'log-files' , config['ENV_NAME'] , 'last_run')
             self.agent.load(load_path)
 
     def warmup(self , ob_filter=None , max_steps=64 , ep=1):
@@ -87,6 +88,7 @@ class Worker(object):
         split_obs = None
         if config['ENV_NAME'] == 'osim':
             try:
+                from utils.env_wrapper import Environment
                 env = Environment(augment_rw=config['USE_RW'] ,
                                   concat=config['CONCATENATE_FRAMES'] ,
                                   normalize=config['NORMALIZE'] ,
@@ -109,45 +111,50 @@ class Worker(object):
 
     def unroll(self , max_steps=2048 , ob_filter=None):
         ob = self.env.reset()
-        self.img.reset(ob)
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
-        # TODO save only last 10 episodes using deque
         ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
-        state_in = [np.zeros((1, 64)),np.zeros((1, 64))]
-        while True:
 
+
+        while t < max_steps:
             if ob_filter: ob = ob_filter(ob)
-            act , v = self.agent.get_action_value(ob)
+            act, v = self.agent.get_action_value(ob)
+            # self.imagine(ob, ob_filter = ob_filter)
+            ob1 , r , done , _ = self.env.step(act)
 
-            if t > 0 and t % max_steps == 0:
-                yield self.memory.release(v=v , done=done , t=t) , self.compute_summary(ep_l , ep_r , ep_rws , ep_ls ,
-                                                                                        ep , t)
-                ep_rws = []
-                ep_ls = []
-
-
-            if not self.imagine:
-                ob1 , r , done , _ = self.env.step(act)
-
-            else:
-                for _ in range(3):
-                    ob1 , _ , _ , _ , state_out = self.img.step(act , state_in)
-
-                self.img.collect(ob, act, ob1)
-            # TODO do i need to deep copy here?
-            self.memory.collect((ob.copy() , act , r , done , v) , t)
-            ob = ob1
-
+            self.memory.collect((ob , act , r , done , v) , t)
+            ob = ob1.copy()
             ep_l += 1
             ep_r += r
             if done:
                 ep += 1
                 ep_rws.append(ep_r)
                 ep_ls.append(ep_l)
-                ep_r = 0
-                ep_l = 0
+                ep_r = ep_l = 0
                 ob = self.env.reset()
             t += 1
+
+        self.t += t
+
+        return self.memory.release(v=v , done=done , t=self.t) , self.compute_summary(ep_l , ep_r , ep_rws , ep_ls ,
+                                                                                 ep , t)
+    def imagine(self,ob ,ob_filter = None, n_branches = 3, branch_depths = 3):
+
+        actions , scores = [] , []
+
+        for branch in range(n_branches):
+            self.imagination.set_state(ob)
+            ob_img = ob.copy()
+            for step in range(branch_depths):
+                if ob_filter: ob_img = ob_filter(ob_img)
+                act , v = self.agent.get_action_value(ob_img)
+                if step == 0:
+                    actions.append(act)
+                ob1 , _ , _ , _ = self.imagination.step(act)
+                ob_img = ob1.copy()
+            scores.append(v)
+        act = actions[np.argmax(scores)]
+        v = self.agent.get_value(state=ob)
+        return act,v
 
     @staticmethod
     def compute_summary(*stats):
@@ -165,7 +172,7 @@ class Worker(object):
 
     def write_summary(self , stats , ep , network_stats=None):
 
-        for (k , v) in stats.iteritems():
+        for (k , v) in six.iteritems(stats):
             # if np.ndim(v) > 1:
             #     self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
             #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))

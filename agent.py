@@ -1,16 +1,15 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.layers import summarize_tensors
-import os
 
 from policy import PolicyNetwork
 from utils.misc_utils import explained_variance
 from value import ValueNetwork
+from utils.tf_utils import _save , _load
 
 
 class Agent(object):
     def __init__(self , obs_dim , act_dim , kl_target=1e-2 , eta=1000 , beta=1.0 , h_size=(128 , 64 , 32)):
-
         self.policy = PolicyNetwork(name='pi' , obs_dim=obs_dim , act_dim=act_dim , eta=eta ,
                                     h_size=h_size , kl_target=kl_target)
 
@@ -26,31 +25,22 @@ class Agent(object):
         self.summary_ops = tf.summary.merge(summarize_tensors(
             self.policy.get_tensor_to_summarize() + self.value.get_tensor_to_summarize()))
 
+    def save(self , save_dir):
+        _save(sess=self.sess , saver=self.saver , log_dir=save_dir)
+
+    def load(self, save_dir):
+        _load(sess=self.sess , saver=self.saver , log_dir=save_dir)
+
     def compute_summary(self , feed_dict):
-        summary = self.sess.run(self.summary_ops, feed_dict=feed_dict)
+        summary = self.sess.run(self.summary_ops , feed_dict=feed_dict)
         return summary
-
-    def save(self , log_dir):
-        try:
-            self.saver.save(sess=self.sess , save_path=os.path.join(log_dir , 'model.ckpt'))
-        except Exception as e:
-            tf.logging.error(e)
-            raise
-
-    def load(self , log_dir):
-        # TODO find a way to restaore the latest model
-        try:
-
-            ckpt = tf.train.latest_checkpoint(log_dir)
-            self.saver.restore(sess=self.sess , save_path=ckpt)
-        except Exception as e:
-            tf.logging.error("Unable to restore variables. Re-initializing graph")
-            pass
 
     def get_action(self , state):
         return self.sess.run(self.policy.sample , feed_dict={self.policy.obs: [state]}).flatten()
 
     def get_value(self , state):
+        if np.ndim(state) < 2:
+            state = [state]
         return self.sess.run(self.value.vf , feed_dict={self.value.obs: state})
 
     def get_action_value(self , state):
@@ -77,22 +67,22 @@ class Agent(object):
                              self.policy.logstd_old: logstd_old ,
                              self.policy.beta: self.beta ,
                              # self.policy.lr: self.lr_multiplier * lr,
-                                 }
+                             }
 
                 policy_loss , kl , entropy , _ = self.sess.run(
                     [self.policy.loss , self.policy.kl , self.policy.entropy , self.policy.train] ,
                     feed_dict=feed_dict)
-                i+=1
+                i += 1
 
             if kl > 4 * self.kl_target:
                 tf.logging.info('KL too high. Stopping update after {}'.format(i))
                 self.early_stop += 1
                 break
         print('t1' , (time.time() - start) / (num_iter))
-            # feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl'] ,
-            #                                       self.value.value_old: batch['vs']}
-            #     value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
-            # #
+        # feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl'] ,
+        #                                       self.value.value_old: batch['vs']}
+        #     value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
+        # #
 
         start = time.time()
         for i in range(num_iter):
@@ -101,7 +91,7 @@ class Agent(object):
                              # self.value.value_old: batch['vs']
                              }
                 value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
-        print('t2',(time.time() - start) / (num_iter))
+        print('t2' , (time.time() - start) / (num_iter))
         self.update_beta(kl , eps=eps)
 
         stats = {
@@ -168,14 +158,14 @@ class Agent(object):
     def close_session(self):
         self.sess.close()
 
-    def sync(self, old, new):
-        self.sess.run(self.update_pi(old, new))
+    def sync(self , old , new):
+        self.sess.run(self.update_pi(old , new))
 
     @staticmethod
-    def update_pi(old, new, tau=0.01):
+    def update_pi(old , new , tau=0.01):
         params = []
-        for o, n in zip(old, new):
-            params.append(tf.assign(n, tf.multiply(n , tau) + tf.multiply(o , 1. - tau)))
+        for o , n in zip(old , new):
+            params.append(tf.assign(n , tf.multiply(n , tau) + tf.multiply(o , 1. - tau)))
 
         return params
 
@@ -184,7 +174,7 @@ class Agent(object):
         summary_op = []
         for tensor in tensor_list:
             if tensor.get_shape().ndims != 0:
-                mean , var = tf.nn.moments(tensor , axes=[0], keep_dims=True)
+                mean , var = tf.nn.moments(tensor , axes=[0] , keep_dims=True)
 
                 summary_op.append(tf.summary.histogram(name=tensor.name.replace(':' , '_') , values=tensor))
 
@@ -207,6 +197,5 @@ class Agent(object):
                 #                                     tensor=tf.reduce_min(input_tensor=tensor , axis=[0 , 1])))
             else:
 
-                summary_op.append(tf.summary.scalar(name=tensor.name.replace(':' , '_'), tensor=tensor))
+                summary_op.append(tf.summary.scalar(name=tensor.name.replace(':' , '_') , tensor=tensor))
         return tf.summary.merge_all()
-
