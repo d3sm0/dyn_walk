@@ -10,7 +10,6 @@ tests/.ipynb_checkpoints/
 tests/Untitled.ipynb
 dppo.py
 model.py
-img.py
-cache
+cache/dataset.pkl
 tf-models
 *.png

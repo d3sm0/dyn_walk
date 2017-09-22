@@ -57,7 +57,7 @@ def _save(saver , sess , log_dir):
         saver.save(sess=sess , save_path=os.path.join(log_dir , 'model.ckpt'))
     except Exception as e:
         tf.logging.error(e)
-        raise
+        raise e
 
 
 def _load(saver , sess , log_dir):
@@ -67,4 +67,4 @@ def _load(saver , sess , log_dir):
         print('restored')
     except Exception as e:
         tf.logging.error(e)
-        pass
+        raise e
