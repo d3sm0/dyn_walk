@@ -1,0 +1,16 @@
+__pycache__
+.idea
+*.pyc
+nb
+err.log
+out.log
+tests/.
+log-files
+tests/.ipynb_checkpoints/
+tests/Untitled.ipynb
+dppo.py
+model.py
+img.py
+cache
+tf-models
+*.png
