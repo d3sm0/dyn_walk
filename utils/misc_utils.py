@@ -73,8 +73,9 @@ def train_test_set(datasets , split_size=.3):
 
 def load_data(data_dir):
     try:
-        with open(data_dir , "rb") as fin:
+        with open(data_dir + '/dataset.pkl', "rb") as fin:
             datasets = pickle.load(fin)
+            logging.info('Dataset loaded')
     except IOError:
         logging.info('File not found, buidling dataset from default run')
         datasets = build_dataset(data_dir)

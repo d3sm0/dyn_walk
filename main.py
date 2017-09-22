@@ -23,9 +23,12 @@ def main(config):
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0] ,))
     worker.warmup(ob_filter , max_steps=config['WARMUP_TIME'])
-
     tf.logging.info('Init training. Stats saved at ' + logger.main_path)
+
     # oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
+
+    worker.imagination.load()
+
     t = 0
     unrolls = 0
     while t < config['MAX_STEPS']:
@@ -51,9 +54,9 @@ def main(config):
 
         train_stats , network_stats = worker.agent.train(dataset , num_iter=config['NUM_ITER'] , eps=config['EPS'])
 
-        # img_stats = worker.imagination.train(dataset)
+        model_stats = worker.imagination.train()
 
-        logger.log(merge_dicts(train_stats , ep_stats))
+        logger.log(merge_dicts(train_stats , ep_stats, model_stats))
         # if t % config['REPORT_EVERY'] == 0:
         logger.write(display=True)
         worker.write_summary(merge_dicts(ep_stats , train_stats) , ep_stats['total_ep'] , network_stats=network_stats)

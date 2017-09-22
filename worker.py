@@ -8,6 +8,7 @@ from img import Imagination
 import six
 from utils.tf_utils import _load
 
+
 class Worker(object):
     def __init__(self , config , log_dir):
         self.imagine = False
@@ -18,7 +19,8 @@ class Worker(object):
                            eta=config['ETA'] ,
                            beta=config['BETA'] , h_size=config['H_SIZE'])
 
-        # self.imagination = Imagination(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1], z_dim=2)
+        self.imagination = Imagination(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1] , z_dim=2 ,
+                                       model_path='tf-models/vae')
 
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
@@ -113,14 +115,20 @@ class Worker(object):
         ob = self.env.reset()
         t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
         ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
-
-
+        ob_true = ob.copy()
         while t < max_steps:
-            if ob_filter: ob = ob_filter(ob)
-            act, v = self.agent.get_action_value(ob)
-            # self.imagine(ob, ob_filter = ob_filter)
-            ob1 , r , done , _ = self.env.step(act)
 
+            if ob_filter: ob = ob_filter(ob)
+            act , v = self.agent.get_action_value(ob)
+            # act , v = self.sample_acts(ob=ob)
+            act = np.clip(act , self.env_dim[2][0] , self.env_dim[2][1])
+            # self.imagine(ob, ob_filter = ob_filter)
+            self.imagination.set_state(ob_filter(ob_true))
+
+            ob_true, r , done , _ = self.env.step(act)
+
+            ob1 , _ , _ , _ = self.imagination.step(act)
+            self.imagination.collect(s=ob_true, a = act, d = done)
             self.memory.collect((ob , act , r , done , v) , t)
             ob = ob1.copy()
             ep_l += 1
@@ -131,13 +139,15 @@ class Worker(object):
                 ep_ls.append(ep_l)
                 ep_r = ep_l = 0
                 ob = self.env.reset()
+                ob_true = ob.copy()
             t += 1
 
         self.t += t
 
         return self.memory.release(v=v , done=done , t=self.t) , self.compute_summary(ep_l , ep_r , ep_rws , ep_ls ,
-                                                                                 ep , t)
-    def imagine(self,ob ,ob_filter = None, n_branches = 3, branch_depths = 3):
+                                                                                      ep , t)
+
+    def sample_acts(self , ob , ob_filter=None , n_branches=3 , branch_depths=3):
 
         actions , scores = [] , []
 
@@ -154,7 +164,7 @@ class Worker(object):
             scores.append(v)
         act = actions[np.argmax(scores)]
         v = self.agent.get_value(state=ob)
-        return act,v
+        return act , v
 
     @staticmethod
     def compute_summary(*stats):
