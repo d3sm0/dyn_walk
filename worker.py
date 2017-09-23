@@ -118,8 +118,8 @@ class Worker(object):
         vs_imaginated = deque(maxlen=10)
         forecast_errors = []
         while t < max_steps:
-            n_branches = 2
-            branch_depth = 4
+            n_branches = 4
+            branch_depth = 1
             ob = ob_filter(ob)
 
             act, v, v_imaginated = self.explore_options(ob, n_branches, branch_depth)
@@ -145,16 +145,12 @@ class Worker(object):
                 ep_ls.append(ep_l)
                 ep_r = ep_l = 0
                 ob = self.env.reset()
-                ob_true = ob.copy()
             t += 1
 
         self.t += t
         return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_errors)
 
     def explore_options(self, world_state, n_branches, branch_depths):
-        # act, state_value = self.agent.get_action_value(world_state)
-        # return act, state_value, 0
-
         actions, scores = [], []
         for branch in range(n_branches):
             self.imagination.set_state(world_state)

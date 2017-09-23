@@ -52,7 +52,7 @@ class Imagination(object):
         if dataset is None:
             dataset = Dataset(data={
                 'obs': np.vstack(self.s[:-1]),
-                'act': np.vstack(self.a[:-1]),
+                'acts': np.vstack(self.a[:-1]),
                 'obs1': np.vstack(self.s[1:]),
             }, shuffle=True)
 
@@ -60,7 +60,7 @@ class Imagination(object):
             for batch in dataset.iterate_once():
                 s0 = batch['obs']
                 s1 = batch['obs1']
-                acts = batch['act']
+                acts = batch['acts']
                 stats = self.model.train(s0, acts, s1)
                 losses.append(stats)
                 i += 1
