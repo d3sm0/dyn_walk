@@ -100,7 +100,6 @@ class Imagination(object):
         return {'avg_loss': np.mean(losses)}
 
     def pretrain_model(self, data_dir, verbose=True):
-
         data = load_data(data_dir=data_dir)
         assert data is not None
         train_set, test_set = train_test_set(datasets=data)
@@ -124,7 +123,6 @@ class Imagination(object):
         print("loading model")
         _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
         print("loaded model")
-
 
 if __name__ == "__main__":
 
@@ -156,7 +154,7 @@ if __name__ == "__main__":
     worker.warmup(ob_filter, 60)
     # img.reset(ob1)
     losses_v = []
-
+    obs = []
     losses_v = 0
     losses_r = 0
     obs = []
@@ -173,7 +171,6 @@ if __name__ == "__main__":
             act, _ = worker.agent.get_action_value(ob)
 
             # img.set_state(ob)  # follow the ground truth
-
             ob1_tilde, reward_tilde, done, _ = img.step(act)
 
             ob1, r, done, _ = worker.env.step(act)

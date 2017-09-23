@@ -23,9 +23,12 @@ def main(config):
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0],))
     worker.warmup(ob_filter, max_steps=config['WARMUP_TIME'])
-
     tf.logging.info('Init training. Stats saved at ' + logger.main_path)
+
     # oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
+
+    worker.imagination.load()
+
     t = 0
     unrolls = 0
     worker.imagination.load()

@@ -22,7 +22,6 @@ class Worker(object):
 
         self.imagination = Imagination(obs_dim=self.env_dim[0], acts_dim=self.env_dim[1], z_dim=2, model="fc",
                                        model_path="tf-models/")
-
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
         self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
@@ -146,10 +145,10 @@ class Worker(object):
                 ep_ls.append(ep_l)
                 ep_r = ep_l = 0
                 ob = self.env.reset()
+                ob_true = ob.copy()
             t += 1
 
         self.t += t
-
         return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_errors)
 
     def explore_options(self, world_state, n_branches, branch_depths):
