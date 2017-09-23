@@ -1,4 +1,5 @@
 import tensorflow as tf
+import random
 from collections import deque
 import os
 from agent import Agent
@@ -8,65 +9,67 @@ from img import Imagination
 import six
 from utils.tf_utils import _load
 
+
 class Worker(object):
-    def __init__(self , config , log_dir):
+    def __init__(self, config, log_dir):
         self.imagine = False
 
-        self.env , self.env_dim , split_obs = self.init_environment(config)
+        self.env, self.env_dim, split_obs = self.init_environment(config)
 
-        self.agent = Agent(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , kl_target=config['KL_TARGET'] ,
-                           eta=config['ETA'] ,
-                           beta=config['BETA'] , h_size=config['H_SIZE'])
+        self.agent = Agent(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], kl_target=config['KL_TARGET'],
+                           eta=config['ETA'],
+                           beta=config['BETA'], h_size=config['H_SIZE'])
 
-        # self.imagination = Imagination(obs_dim=self.env_dim[0] , acts_dim=self.env_dim[1], z_dim=2)
+        self.imagination = Imagination(obs_dim=self.env_dim[0], acts_dim=self.env_dim[1], z_dim=2, model="fc",
+                                       model_path="tf-models/")
 
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
-        self.memory = Memory(obs_dim=self.env_dim[0] , act_dim=self.env_dim[1] , max_steps=config['MAX_STEPS_BATCH'] ,
+        self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
                              main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
         self.t = 0
 
-        if config['LAST_RUN'] != False:
-            load_path = os.path.join(os.getcwd() , 'log-files' , config['ENV_NAME'] , 'last_run')
+        if config['LAST_RUN']:
+            load_path = os.path.join(os.getcwd(), 'log-files', config['ENV_NAME'], 'last_run')
             self.agent.load(load_path)
 
-    def warmup(self , ob_filter=None , max_steps=64 , ep=1):
+    def warmup(self, ob_filter=None, max_steps=64, ep=1):
         for e in range(ep):
             ob = self.env.reset()
             for _ in range(max_steps):
                 if ob_filter is not None: ob = ob_filter(ob)
                 a = self.agent.get_action(ob)
-                ob , r , t , _ = self.env.step(a)
+                ob, r, t, _ = self.env.step(a)
                 if t:
                     ob = self.env.reset()
 
         tf.logging.info('Warmup ended')
 
-    def eval(self , log_dir):
+    def eval(self, log_dir):
 
         ob = self.env.reset()
-        vs , rs , i = 0 , 0 , 0
+        vs, rs, i = 0, 0, 0
         self.agent.load(log_dir)
         t = False
         while not t:
             self.env.render()
-            a , v = self.agent.get_action_value(ob)
-            ob , r , t , _ = self.env.step(a)
+            a, v = self.agent.get_action_value(ob)
+            ob, r, t, _ = self.env.step(a)
             vs += v
             rs += r
             i += 1
 
-        return {'rs': rs , 'vs': vs , 'i': i}
+        return {'rs': rs, 'vs': vs, 'i': i}
 
-    def compute_target(self , seq):
+    def compute_target(self, seq):
 
         # TODO not sure why using the tdl estimator instead of the discounted sum of rewards
-        dones = np.append(seq['ds'] , 0)
-        v_hat = np.append(seq['vs'] , seq['v_next'])
+        dones = np.append(seq['ds'], 0)
+        v_hat = np.append(seq['vs'], seq['v_next'])
         T = len(seq['rws'])
-        seq['adv'] = gae = np.empty(T , 'float32')
+        seq['adv'] = gae = np.empty(T, 'float32')
         rws = seq['rws']
         last_gae = 0
         for t in reversed(range(T)):
@@ -89,9 +92,9 @@ class Worker(object):
         if config['ENV_NAME'] == 'osim':
             try:
                 from utils.env_wrapper import Environment
-                env = Environment(augment_rw=config['USE_RW'] ,
-                                  concat=config['CONCATENATE_FRAMES'] ,
-                                  normalize=config['NORMALIZE'] ,
+                env = Environment(augment_rw=config['USE_RW'],
+                                  concat=config['CONCATENATE_FRAMES'],
+                                  normalize=config['NORMALIZE'],
                                   frame_rate=config['FRAME_RATE'])
                 env_dims = env.get_dims()
                 split_obs = env.split_obs
@@ -103,25 +106,37 @@ class Worker(object):
                 import gym
                 env = gym.make(config['ENV_NAME'])
                 env_dims = (
-                    env.observation_space.shape[0] , env.action_space.shape[0] ,
-                    (env.action_space.low , env.action_space.high))
+                    env.observation_space.shape[0], env.action_space.shape[0],
+                    (env.action_space.low, env.action_space.high))
             except:
                 raise NotImplementedError()
-        return env , env_dims , split_obs
+        return env, env_dims, split_obs
 
-    def unroll(self , max_steps=2048 , ob_filter=None):
+    def unroll(self, max_steps=2048, ob_filter=lambda x: x):
         ob = self.env.reset()
-        t , ep , ep_r , ep_l = 0 , 0 , 0 , 0
-        ep_rws , ep_ls = deque(maxlen=10) , deque(maxlen=10)
-
-
+        t, ep, ep_r, ep_l = 0, 0, 0, 0
+        ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
+        vs_imaginated = deque(maxlen=10)
+        forecast_errors = []
         while t < max_steps:
-            if ob_filter: ob = ob_filter(ob)
-            act, v = self.agent.get_action_value(ob)
-            # self.imagine(ob, ob_filter = ob_filter)
-            ob1 , r , done , _ = self.env.step(act)
+            n_branches = 2
+            branch_depth = 4
+            ob = ob_filter(ob)
 
-            self.memory.collect((ob , act , r , done , v) , t)
+            act, v, v_imaginated = self.explore_options(ob, n_branches, branch_depth)
+            vs_imaginated.append(v_imaginated)
+            if t >= branch_depth:
+                forecast_errors.append(v-vs_imaginated[branch_depth])
+
+            # act, v = self.agent.get_action_value(ob)
+
+            # self.imagine(ob, ob_filter = ob_filter)
+            # self.imagination.set_state(ob_filter(ob_true))
+            ob1, r, done, _ = self.env.step(act)
+
+            # ob_augmented = np.concat((ob, ob_true), axis=0)
+            self.memory.collect((ob, act, r, done, v), t)
+            self.imagination.collect(ob, act)
             ob = ob1.copy()
             ep_l += 1
             ep_r += r
@@ -135,51 +150,49 @@ class Worker(object):
 
         self.t += t
 
-        return self.memory.release(v=v , done=done , t=self.t) , self.compute_summary(ep_l , ep_r , ep_rws , ep_ls ,
-                                                                                 ep , t)
-    def imagine(self,ob ,ob_filter = None, n_branches = 3, branch_depths = 3):
+        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_errors)
 
-        actions , scores = [] , []
+    def explore_options(self, world_state, n_branches, branch_depths):
+        # act, state_value = self.agent.get_action_value(world_state)
+        # return act, state_value, 0
 
+        actions, scores = [], []
         for branch in range(n_branches):
-            self.imagination.set_state(ob)
-            ob_img = ob.copy()
-            for step in range(branch_depths):
-                if ob_filter: ob_img = ob_filter(ob_img)
-                act , v = self.agent.get_action_value(ob_img)
-                if step == 0:
-                    actions.append(act)
-                ob1 , _ , _ , _ = self.imagination.step(act)
-                ob_img = ob1.copy()
-            scores.append(v)
+            self.imagination.set_state(world_state)
+            # world_state.copy()
+            act, state_value = self.agent.get_action_value(world_state)
+            actions.append(act)
+            for step in range(branch_depths - 1):
+                imgaginated_ob, _, _, _ = self.imagination.step(act)
+                act, state_value = self.agent.get_action_value(imgaginated_ob)
+            scores.append(state_value)
         act = actions[np.argmax(scores)]
-        v = self.agent.get_value(state=ob)
-        return act,v
+        v = self.agent.get_value(state=world_state)
+        return act, v, max(scores)
 
     @staticmethod
-    def compute_summary(*stats):
-        ep_l , ep_r , ep_rws , ep_ls , ep , t = stats
-
+    def compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_error):
         ep_stats = {
-            'last_ep_rw': ep_r ,
-            'last_ep_len': ep_l ,
-            'avg_rw': np.array(ep_rws).mean() ,
-            'avg_len': np.array(ep_ls).mean() ,
-            'total_steps': t ,
-            'total_ep': ep ,
+            'last_ep_rw': ep_r,
+            'last_ep_len': ep_l,
+            'avg_rw': np.array(ep_rws).mean(),
+            'avg_len': np.array(ep_ls).mean(),
+            'total_steps': t,
+            'total_ep': ep,
+            'forecast_error': sum(forecast_error)/len(forecast_error),
         }
         return ep_stats
 
-    def write_summary(self , stats , ep , network_stats=None):
+    def write_summary(self, stats, ep, network_stats=None):
 
-        for (k , v) in six.iteritems(stats):
+        for (k, v) in six.iteritems(stats):
             # if np.ndim(v) > 1:
             #     self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
             #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
             #     self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
             # else:
-            self.ep_summary.value.add(simple_value=v , tag=k)
+            self.ep_summary.value.add(simple_value=v, tag=k)
         if network_stats is not None:
-            self.writer.add_summary(network_stats , ep)
-        self.writer.add_summary(self.ep_summary , ep)
+            self.writer.add_summary(network_stats, ep)
+        self.writer.add_summary(self.ep_summary, ep)
         self.writer.flush()

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import lfilter
 
 
-def explained_variance(ypred , y):
+def explained_variance(ypred, y):
     """
     Computes fraction of variance that ypred explains about y.
     Returns 1 - Var[y-ypred] / Var[y]
@@ -18,7 +18,7 @@ def explained_variance(ypred , y):
     return np.nan if vary == 0 else 1 - np.var(y - ypred) / vary
 
 
-def discount(x , gamma):
+def discount(x, gamma):
     """
     computes discounted sums along 0th dimension of x.
 
@@ -36,13 +36,13 @@ def discount(x , gamma):
 
     """
     assert x.ndim >= 1
-    return lfilter([1] , [1 , -gamma] , x[::-1] , axis=0)[::-1]
+    return lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 
-def merge_dicts(x , y , z=None):
+def merge_dicts(x, y, z=None):
     """Given two dicts, merge them into a new dict as a shallow copy."""
     if z:
-        y = merge_dicts(y , z)
+        y = merge_dicts(y, z)
     z = x.copy()
     z.update(y)
     return z
@@ -54,10 +54,11 @@ import glob
 from tensorflow import logging
 
 
-def train_test_set(datasets , split_size=.3):
-    obs0 = datasets['obs'][:-1]
-    obs1 = datasets['obs'][1:]
-    acts = datasets['acts'][:-1]
+def train_test_set(datasets, split_size=.3):
+    maxlen = int(len(datasets['obs'])/1)
+    obs0 = datasets['obs'][:-1][:maxlen]
+    obs1 = datasets['obs'][1:][:maxlen]
+    acts = datasets['acts'][:-1][:maxlen]
 
     # TODO you may want to sample randomly here
     obs0_ts = obs0[:int(split_size * len(obs0))]
@@ -67,17 +68,20 @@ def train_test_set(datasets , split_size=.3):
     obs0_tr = obs0[int(split_size * len(obs0)):]
     obs1_tr = obs1[int(split_size * len(obs1)):]
     acts_tr = acts[int(split_size * len(acts)):]
-    print("test length" , int(split_size * len(obs0)) , len(obs0))
-    return (obs0_tr , acts_tr , obs1_tr) , (obs0_ts , acts_ts , obs1_ts)
+    print("test length", int(split_size * len(obs0)), len(obs0))
+    return (obs0_tr, acts_tr, obs1_tr), (obs0_ts, acts_ts, obs1_ts)
 
 
 def load_data(data_dir):
     try:
-        with open(data_dir , "rb") as fin:
+        with open(data_dir, "rb") as fin:
             datasets = pickle.load(fin)
-    except IOError:
-        logging.info('File not found, buidling dataset from default run')
-        datasets = build_dataset(data_dir)
+    except (FileNotFoundError, IsADirectoryError) as _:
+        try:
+            datasets = load_data(data_dir + '/dataset.pkl')
+        except FileNotFoundError:
+            logging.info('File not found, buidling dataset from default run')
+            datasets = build_dataset(data_dir)
     return datasets
 
 
@@ -87,19 +91,19 @@ def build_dataset(data_dir):
     i = 0
     for file_name in names:
         i += 1
-        print(file_name , i , len(names) , i / len(names))
-        with open(file_name , "rb") as fin:
-            data = pickle.load(fin , encoding="bytes")
+        print(file_name, i, len(names), i / len(names))
+        with open(file_name, "rb") as fin:
+            data = pickle.load(fin, encoding="bytes")
             if len(datasets) == 0:
-                for k , v in data.items():
+                for k, v in data.items():
                     datasets[k] = np.array(v)
             else:
-                for k , v in data.items():
+                for k, v in data.items():
                     if np.ndim(v) == 0:
-                        datasets[k] = np.append(datasets[k] , v)
+                        datasets[k] = np.append(datasets[k], v)
                     else:
-                        datasets[k] = np.concatenate((datasets[k] , v) , axis=0)
-    with open(data_dir + '/dataset.pkl' , "wb") as fout:
-        pickle.dump(datasets , fout)
+                        datasets[k] = np.concatenate((datasets[k], v), axis=0)
+    with open(data_dir + '/dataset.pkl', "wb") as fout:
+        pickle.dump(datasets, fout)
         logging.info('Dataset saved')
     return datasets
