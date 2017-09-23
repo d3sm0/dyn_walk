@@ -55,9 +55,10 @@ from tensorflow import logging
 
 
 def train_test_set(datasets, split_size=.3):
-    obs0 = datasets['obs'][:-1]
-    obs1 = datasets['obs'][1:]
-    acts = datasets['acts'][:-1]
+    maxlen = int(len(datasets['obs']) / 1)
+    obs0 = datasets['obs'][:-1][:maxlen]
+    obs1 = datasets['obs'][1:][:maxlen]
+    acts = datasets['acts'][:-1][:maxlen]
 
     # TODO you may want to sample randomly here
     obs0_ts = obs0[:int(split_size * len(obs0))]
@@ -73,12 +74,14 @@ def train_test_set(datasets, split_size=.3):
 
 def load_data(data_dir):
     try:
-        with open(data_dir + '/dataset.pkl', "rb") as fin:
+        with open(data_dir, "rb") as fin:
             datasets = pickle.load(fin)
-            logging.info('Dataset loadedd ')
-    except IOError:
-        logging.info('File not found, buidling dataset from default run')
-        datasets = build_dataset(data_dir)
+    except (FileNotFoundError, IsADirectoryError) as _:
+        try:
+            datasets = load_data(data_dir + '/dataset.pkl')
+        except FileNotFoundError:
+            logging.info('File not found, buidling dataset from default run')
+            datasets = build_dataset(data_dir)
     return datasets
 
 

@@ -1,18 +1,19 @@
-import tensorflow as tf
 import matplotlib.pyplot as plt
-from utils.tf_utils import _load, _save
-from memory.dataset import Dataset
 import numpy as np
+import tensorflow as tf
+
+from memory.dataset import Dataset
 from models.cvae import VAE
 from models.fc_model import FCModel
 from utils.misc_utils import load_data, train_test_set
+from utils.tf_utils import _load, _save
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Imagination(object):
     def __init__(self, obs_dim, acts_dim, model_path=None, model='vae', z_dim=None):
-        self.s, self.a, self.d = [], [], []
+        self.s, self.a = [], []
         self.obs_dim = obs_dim
         self.acts_dim = acts_dim
         self.is_trained = False
@@ -25,45 +26,38 @@ class Imagination(object):
 
         self.model_path = model_path
 
-    def load(self):
-        _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
-
     def set_state(self, state):
         self.state = state
         return self.state
 
     def step(self, a):
-        # s1_tilde = img.sess.run(img.model.s1_tilde, feed_dict={img.model.sa: sa})
-        # r_tilde = img.calc_reward(ob, act, s1_tilde)
-
         s1_tilde = np.squeeze(self.model.step(self.state, a))
-        # sudgested by manuel
+
         reward, done = self.calc_reward(self.state, a, s1_tilde)
         self.state = s1_tilde
 
         return s1_tilde, reward, done, {}
 
-    def collect(self, s, a, d):
+    def collect(self, s, a):
         self.s.append(s)
         self.a.append(a)
-        self.d.append(d)
-        # self.s1.append(np.array(s1))
-        # TODO if somehting do training
-        # if self.max_len == len(self.sa):
-        #     print("imagination train loss:" , self.train())
-        #     self.sa = []
-        #     self .s1 = []
-        # self.train()
 
-    def train(self, iter_batch=10, dataset=None, verbose=False):
+    def train(self, iter_batch=20, dataset=None, verbose=False):
         losses = []
         i = 0
         if dataset is None:
-            dataset = Dataset(
-                data={'obs': np.vstack(self.s[:-1]), 'obs1': np.vstack(self.s[1:]), 'acts': np.vstack(self.a[:-1])})
+            dataset = Dataset(data={
+                'obs': np.vstack(self.s[:-1]),
+                'act': np.vstack(self.a[:-1]),
+                'obs1': np.vstack(self.s[1:]),
+            }, shuffle=True)
+
         for _ in range(iter_batch):
             for batch in dataset.iterate_once():
-                stats = self.model.train(batch['obs'], batch['acts'], batch['obs1'])
+                s0 = batch['obs']
+                s1 = batch['obs1']
+                acts = batch['act']
+                stats = self.model.train(s0, acts, s1)
                 losses.append(stats)
                 i += 1
                 if verbose and i % 100 == 0:
@@ -72,18 +66,18 @@ class Imagination(object):
 
     @staticmethod
     def calc_reward(s0, a, s1):
-        reward = 1.0
-        ob = s0
-        notdone = np.isfinite(ob).all() and (np.abs(ob[1]) <= .2)
-        done = not notdone
+        # reward = 1.0
+        # ob = s0
+        # notdone = np.isfinite(ob).all() and (np.abs(ob[1]) <= .2)
+        # done = not notdone
 
-        # posbefore = s0[0]
-        # posafter , height , ang = s1[0:3]
-        # alive_bonus = 1.0
-        # reward = (posafter - posbefore)
-        # reward += alive_bonus
-        # reward -= 1e-3 * np.square(a).sum()
-        # done = not (0.8 < height < 2.0 and -1.0 < ang < 1.0)
+        posbefore = s0[0]
+        posafter, height, ang = s1[0:3]
+        alive_bonus = 1.0
+        reward = (posafter - posbefore)
+        reward += alive_bonus
+        reward -= 1e-3 * np.square(a).sum()
+        done = not (0.8 < height < 2.0 and -1.0 < ang < 1.0)
         return reward, done
 
     def eval_model(self, dataset, iter_batch=1, verbose=False):
@@ -91,15 +85,17 @@ class Imagination(object):
         i = 0
         for _ in range(iter_batch):
             for batch in dataset.iterate_once():
-                stats = self.model.eval(batch['obs'], batch['acts'], batch['obs1'])
+                s0 = batch['obs']
+                s1 = batch['obs1']
+                acts = batch['acts']
+                stats = self.model.eval(s0, acts, s1)
                 i += 1
                 losses.append(stats)
                 if i % 100 == 0:
-                    tf.logging.info('Dataset coverd {}. current loss {}'.format(i / dataset.n, stats))
+                    tf.logging.info('Dataset covered {}. current loss {}'.format(i / dataset.n, stats))
         return {'avg_loss': np.mean(losses)}
 
     def pretrain_model(self, data_dir, verbose=True):
-
         data = load_data(data_dir=data_dir)
         assert data is not None
         train_set, test_set = train_test_set(datasets=data)
@@ -118,6 +114,11 @@ class Imagination(object):
         self.is_trained = True
 
         return {'train_loss': train_loss, 'test_loss': test_loss}
+
+    def load(self):
+        print("loading model")
+        _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
+        print("loaded model")
 
 
 if __name__ == "__main__":
@@ -138,8 +139,7 @@ if __name__ == "__main__":
     # dataset = Imagination.build_dataset(log_dir=dataset_path + '/dataset')
 
     try:
-        _load(saver=img.model.saver, sess=img.model.sess, log_dir=img.model_path)
-
+        img.load()
     except Exception as e:
         tf.logging.info('Pre training model')
         img.pretrain_model(data_dir=dataset_path + '/dataset')
@@ -153,6 +153,7 @@ if __name__ == "__main__":
     obs = []
     losses_v = 0
     losses_r = 0
+    obs = []
     ep_loss_v = []
     ep_loss_r = []
     for _ in range(TEST_RUNS):
@@ -166,7 +167,6 @@ if __name__ == "__main__":
             act, _ = worker.agent.get_action_value(ob)
 
             # img.set_state(ob)  # follow the ground truth
-
             ob1_tilde, reward_tilde, done, _ = img.step(act)
 
             ob1, r, done, _ = worker.env.step(act)
