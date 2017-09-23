@@ -27,9 +27,6 @@ def main(config):
     tf.logging.info('Init training. Stats saved at ' + logger.main_path)
 
     # oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
-
-    worker.imagination.load()
-
     t = 0
     unrolls = 0
     worker.imagination.load()
