@@ -36,7 +36,9 @@ class Agent(object):
         return summary
 
     def get_action(self, state):
-        return self.sess.run(self.policy.sample, feed_dict={self.policy.obs: [state]}).flatten()
+        if np.ndim(state) < 2:
+            state = [state]
+        return self.sess.run(self.policy.sample, feed_dict={self.policy.obs: state}).flatten()
 
     def get_value(self, state):
         if np.ndim(state) < 2:
@@ -44,11 +46,15 @@ class Agent(object):
         return self.sess.run(self.value.vf, feed_dict={self.value.obs: state})
 
     def get_action_value(self, state):
+        if np.ndim(state) < 2:
+            state = [state]
         action, value = self.sess.run([self.policy.sample, self.value.vf],
-                                      feed_dict={self.value.obs: [state], self.policy.obs: [state]})
+                                      feed_dict={self.value.obs: state, self.policy.obs: state})
         return action.flatten(), value
 
     def get_pi(self, state):
+        if np.ndim(state) < 2:
+            state = [state]
         mu, logstd = self.sess.run([self.policy.mu, self.policy.logstd], feed_dict={self.policy.obs: state})
         return mu, logstd
 

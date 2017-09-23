@@ -72,16 +72,15 @@ def train_test_set(datasets, split_size=.3):
     return (obs0_tr, acts_tr, obs1_tr), (obs0_ts, acts_ts, obs1_ts)
 
 
+import os
+
+
 def load_data(data_dir):
-    try:
-        with open(data_dir, "rb") as fin:
+    if os.path.exists(data_dir + '/dataset.pkl'):
+        with open(data_dir + '/dataset.pkl', "rb") as fin:
             datasets = pickle.load(fin)
-    except (FileNotFoundError, IsADirectoryError) as _:
-        try:
-            datasets = load_data(data_dir + '/dataset.pkl')
-        except FileNotFoundError:
-            logging.info('File not found, buidling dataset from default run')
-            datasets = build_dataset(data_dir)
+    else:
+        datasets = build_dataset(data_dir)
     return datasets
 
 

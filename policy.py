@@ -26,6 +26,11 @@ class PolicyNetwork(object):
     def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.tanh):
         h = fc(self.obs, h_size[0], act=act, name='input')
 
+        # from tensorflow.contrib.rnn import BasicLSTMCell
+        # cell = BasicLSTMCell(num_units=32)
+        # h, _ = tf.nn.dynamic_rnn(cell = cell, inputs= tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
+        # h = tf.reshape(h, (-1,cell.state_size.c))
+
         for i in range(len(h_size)):
             h = fc(h, h_size[i], act=act, name='h{}'.format(i))
 
@@ -68,7 +73,7 @@ class PolicyNetwork(object):
         return (loss_1, loss_2, loss_3)
 
     def get_grads(self):
-        return tf.gradients(self.loss, self._params, name='policy_gradients')
+        return tf.gradients(self.loss, self._params, name='gradients_policy')
 
     def get_tensor_to_summarize(self):
         return self._params + [self.loss, self.kl, self.entropy] + [self.obs, self.acts,

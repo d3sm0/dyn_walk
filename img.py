@@ -24,7 +24,7 @@ class Imagination(object):
         elif self.model_name == 'fc':
             self.model = FCModel(obs_dim=obs_dim, acts_dim=acts_dim)
 
-        self.model_path = model_path
+        self.model_path = model_path + model
 
     def set_state(self, state):
         self.state = state
@@ -43,6 +43,8 @@ class Imagination(object):
         self.a.append(a)
 
     def train(self, iter_batch=20, dataset=None, verbose=False):
+        return {'model_avg_loss':0}
+
         losses = []
         i = 0
         if dataset is None:
@@ -115,10 +117,15 @@ class Imagination(object):
 
         return {'train_loss': train_loss, 'test_loss': test_loss}
 
-    def load(self):
-        print("loading model")
-        _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
-        print("loaded model")
+    def load(self, data_dir = None):
+        try:
+            _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
+        except Exception as e:
+            tf.logging.error('Failed model to restore, retraining', e)
+            if data_dir is not None: self.pretrain_model(data_dir)
+            else:
+                raise e
+
 
 
 if __name__ == "__main__":

@@ -65,7 +65,6 @@ def _load(saver, sess, log_dir):
     try:
         ckpt = tf.train.latest_checkpoint(log_dir)
         saver.restore(sess=sess, save_path=ckpt)
-        print('restored')
     except Exception as e:
         tf.logging.error(e)
         raise e

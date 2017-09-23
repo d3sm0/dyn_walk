@@ -12,6 +12,7 @@ from memory.dataset import Memory
 
 class Worker(object):
     def __init__(self, config, log_dir):
+
         self.imagine = False
 
         self.env, self.env_dim, split_obs = self.init_environment(config)
@@ -105,7 +106,7 @@ class Worker(object):
                 import gym
                 env = gym.make(config['ENV_NAME'])
                 env_dims = (
-                    env.observation_space.shape[0], env.action_space.shape[0],
+                    env.observation_space.shape[0]*2, env.action_space.shape[0],
                     (env.action_space.low, env.action_space.high))
             except:
                 raise NotImplementedError()
@@ -117,12 +118,15 @@ class Worker(object):
         ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
         vs_imaginated = deque(maxlen=10)
         forecast_errors = []
+        history = deque(maxlen=2)
+        history.append(ob)
         while t < max_steps:
-            n_branches = 4
+            n_branches = 1
             branch_depth = 1
-            ob = ob_filter(ob)
-
-            act, v, v_imaginated = self.explore_options(ob, n_branches, branch_depth)
+            history.append(ob)
+            h = np.array(history).flatten()
+            h = ob_filter(h)
+            act, v, v_imaginated = self.explore_options(h, n_branches, branch_depth)
             vs_imaginated.append(v_imaginated)
             if t >= branch_depth:
                 forecast_errors.append(v - vs_imaginated[branch_depth])
@@ -134,8 +138,8 @@ class Worker(object):
             ob1, r, done, _ = self.env.step(act)
 
             # ob_augmented = np.concat((ob, ob_true), axis=0)
-            self.memory.collect((ob, act, r, done, v), t)
-            self.imagination.collect(ob, act)
+            self.memory.collect((h, act, r, done, v), t)
+            self.imagination.collect(h, act)
             ob = ob1.copy()
             ep_l += 1
             ep_r += r
@@ -152,6 +156,9 @@ class Worker(object):
                                                                                    forecast_errors)
 
     def explore_options(self, world_state, n_branches, branch_depths):
+        act, state_value = self.agent.get_action_value(world_state)
+        return act, state_value, 0
+
         actions, scores = [], []
         for branch in range(n_branches):
             self.imagination.set_state(world_state)

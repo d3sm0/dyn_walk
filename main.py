@@ -23,13 +23,14 @@ def main(config):
     ob_filter = None
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0],))
-    worker.warmup(ob_filter, max_steps=config['WARMUP_TIME'])
+    #worker.warmup(ob_filter, max_steps=config['WARMUP_TIME'])
     tf.logging.info('Init training. Stats saved at ' + logger.main_path)
-
+    # Sep-23_12_38
     # oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
     t = 0
     unrolls = 0
-    worker.imagination.load()
+    # dataset_path = 'log-files/InvertedPendulum-v1//dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
+    # worker.imagination.load(data_dir=dataset_path)
     while t < config['MAX_STEPS']:
         # print('unrolls' , unrolls)
         # if unrolls % 5 == 0:
