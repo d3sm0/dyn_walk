@@ -1,4 +1,3 @@
-from utils.env_wrapper import Environment
 import tensorflow as tf
 from collections import deque
 import os
@@ -81,6 +80,7 @@ class Worker(object):
         split_obs = None
         if config['ENV_NAME'] == 'osim':
             try:
+                from utils.env_wrapper import Environment
                 env = Environment(augment_rw=config['USE_RW'] ,
                                   concat=config['CONCATENATE_FRAMES'] ,
                                   normalize=config['NORMALIZE'] ,
@@ -145,8 +145,8 @@ class Worker(object):
         return ep_stats
 
     def write_summary(self , stats , ep , network_stats=None):
-
-        for (k , v) in stats.iteritems():
+        import six
+        for (k , v) in six.iteritems(stats):
             # if np.ndim(v) > 1:
             #     self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
             #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
