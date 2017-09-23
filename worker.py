@@ -111,21 +111,19 @@ class Worker(object):
                 raise NotImplementedError()
         return env, env_dims, split_obs
 
-    def unroll(self, max_steps=2048, ob_filter=lambda x: x):
+    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, branch_depth=1):
         ob = self.env.reset()
         t, ep, ep_r, ep_l = 0, 0, 0, 0
         ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
         vs_imaginated = deque(maxlen=10)
         forecast_errors = []
         while t < max_steps:
-            n_branches = 4
-            branch_depth = 1
             ob = ob_filter(ob)
 
             act, v, v_imaginated = self.explore_options(ob, n_branches, branch_depth)
             vs_imaginated.append(v_imaginated)
             if t >= branch_depth:
-                forecast_errors.append(v-vs_imaginated[branch_depth])
+                forecast_errors.append(v - vs_imaginated[branch_depth])
 
             # act, v = self.agent.get_action_value(ob)
 
@@ -148,9 +146,14 @@ class Worker(object):
             t += 1
 
         self.t += t
-        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_errors)
+        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, self.t,
+                                                                                   forecast_errors)
 
     def explore_options(self, world_state, n_branches, branch_depths):
+        if n_branches == 0:
+            act, state_value = self.agent.get_action_value(world_state)
+            return act, state_value, 0
+
         actions, scores = [], []
         for branch in range(n_branches):
             self.imagination.set_state(world_state)
@@ -174,7 +177,7 @@ class Worker(object):
             'avg_len': np.array(ep_ls).mean(),
             'total_steps': t,
             'total_ep': ep,
-            'forecast_error': sum(forecast_error)/len(forecast_error),
+            'forecast_error': sum(forecast_error) / len(forecast_error),
         }
         return ep_stats
 

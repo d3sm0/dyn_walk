@@ -5,13 +5,16 @@ from datetime import datetime
 
 class Logger(object):
     """ Simple training logger: saves to file and optionally prints to stdout """
-    def __init__(self, env_name):
+    def __init__(self, env_name, config):
         """
         Args:
             logname: name for log (e.g. 'Hopper-v1')
             now: unique sub-directory name (e.g. date/time string)
         """
         now = datetime.utcnow().strftime("%b-%d_%H_%M")  # create unique dir
+        for k in config:
+            if "LOG_" in k:
+                now += k[k.index("LOG_"):] + "::" + str(config[k])
 
         self.main_path = os.path.join('log-files', env_name, now)
         try:

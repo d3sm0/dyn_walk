@@ -19,5 +19,7 @@
   "H_SIZE": [128,64,32],
   "SAVE_EVERY": 32768,
   "REPORT_EVERY": 4096,
+  "LOG_BRANCH_DEPTH": 3,
+  "LOG_BRANCH_WIDTH": 2,
   "LAST_RUN":false
 }
