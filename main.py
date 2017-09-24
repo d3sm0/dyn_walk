@@ -8,6 +8,7 @@ from utils.logger import Logger
 from utils.misc_utils import merge_dicts
 from utils.running_stats import ZFilter
 from worker import Worker
+from pprint import pprint
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -16,7 +17,8 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 def main(config):
-    logger = Logger(env_name=config['ENV_NAME'])
+    pprint(config)
+    logger = Logger(env_name=config['ENV_NAME'], config=config)
     logger.save_experiment(config)
     worker = Worker(config, log_dir=logger.main_path)
 
@@ -32,20 +34,11 @@ def main(config):
     # dataset_path = 'log-files/InvertedPendulum-v1//dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
     # worker.imagination.load(data_dir=dataset_path)
     while t < config['MAX_STEPS']:
-        # print('unrolls' , unrolls)
-        # if unrolls % 5 == 0:
-        #     if worker.imagine == False:
-        #         oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
-        #         print('dumping params')
-        #     worker.imagine = True
-        #     print('using img')
-        # else:
-        #     worker.imagine = False
-        #     print('sync')
-        #     worker.agent.sync(old=oldpi , new=worker.agent.policy._params)
-        #     worker.agent.sync(old=oldv , new=worker.agent.value._params)
-
-        sequence, ep_stats = worker.unroll(max_steps=config['MAX_STEPS_BATCH'], ob_filter=ob_filter)
+        sequence, ep_stats = worker.unroll(
+            max_steps=config['MAX_STEPS_BATCH'], ob_filter=ob_filter,
+            branch_depth=config['LOG_BRANCH_DEPTH'],
+            n_branches=config['LOG_BRANCH_WIDTH']
+        )
 
         batch = worker.compute_target(sequence)
 
@@ -58,10 +51,10 @@ def main(config):
         logger.log(merge_dicts(train_stats, ep_stats, model_stats))
         # if t % config['REPORT_EVERY'] == 0:
         logger.write(display=True)
-        worker.write_summary(merge_dicts(ep_stats, train_stats), ep_stats['total_ep'], network_stats=network_stats)
+        worker.write_summary(merge_dicts(ep_stats, train_stats), ep_stats['total_steps'], network_stats=network_stats)
         if t % config['SAVE_EVERY'] == 0:
             worker.agent.save(save_dir=logger.main_path)
-            tf.logging.info('Saved model at ep {}'.format(ep_stats['total_ep']))
+            tf.logging.info('Saved model at ep {}'.format(ep_stats['total_steps']))
 
         t += ep_stats['total_steps']
         unrolls += 1
