@@ -1,5 +1,5 @@
 import tensorflow as tf
-import random
+
 from collections import deque
 import os
 from agent import Agent
@@ -7,7 +7,6 @@ import numpy as np
 from memory.dataset import Memory
 from img import Imagination
 import six
-from utils.tf_utils import _load
 
 
 class Worker(object):
@@ -18,10 +17,14 @@ class Worker(object):
 
         self.agent = Agent(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], kl_target=config['KL_TARGET'],
                            eta=config['ETA'],
-                           beta=config['BETA'], h_size=config['H_SIZE'])
+                           beta=config['BETA'], h_size=config['H_SIZE'],
+                           is_recurrent=True if config['POLICY'] == 'recurrent' else False)
 
-        self.imagination = Imagination(obs_dim=self.env_dim[0], acts_dim=self.env_dim[1], z_dim=2, model="fc",
-                                       model_path="tf-models/")
+        model_path = os.path.join(log_dir, config['IMG_MODEL'],
+                                  'recurrent' if config['IS_RECURRENT'] else 'feedforward')
+        self.imagination = Imagination(obs_dim=self.env_dim[0], acts_dim=self.env_dim[1], z_dim=2,
+                                       model=config['IMG_MODEL'],
+                                       model_path=model_path)
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
         self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
@@ -34,12 +37,15 @@ class Worker(object):
             load_path = os.path.join(os.getcwd(), 'log-files', config['ENV_NAME'], 'last_run')
             self.agent.load(load_path)
 
-    def warmup(self, ob_filter=None, max_steps=64, ep=1):
+    def warmup(self, ob_filter=lambda x: x, max_steps=64, ep=1, history_depth=1):
         for e in range(ep):
             ob = self.env.reset()
+            history = deque(maxlen=history_depth)
+            history.append(ob)
             for _ in range(max_steps):
-                if ob_filter is not None: ob = ob_filter(ob)
-                a = self.agent.get_action(ob)
+                history.append(ob)
+                h = ob_filter(np.array(history).flatten())
+                a = self.agent.get_action(h)
                 ob, r, t, _ = self.env.step(a)
                 if t:
                     ob = self.env.reset()
@@ -105,35 +111,36 @@ class Worker(object):
                 import gym
                 env = gym.make(config['ENV_NAME'])
                 env_dims = (
-                    env.observation_space.shape[0], env.action_space.shape[0],
+                    env.observation_space.shape[0] * config['CONCATENATE_FRAMES'], env.action_space.shape[0],
                     (env.action_space.low, env.action_space.high))
             except:
                 raise NotImplementedError()
         return env, env_dims, split_obs
 
-    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, branch_depth=1):
+    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, branch_depth=1, history_depth=1):
         ob = self.env.reset()
         t, ep, ep_r, ep_l = 0, 0, 0, 0
         ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
         vs_imaginated = deque(maxlen=10)
         forecast_errors = []
-        while t < max_steps:
-            ob = ob_filter(ob)
+        history = deque(maxlen=history_depth)
+        history.append(ob)
 
-            act, v, v_imaginated = self.explore_options(ob, n_branches, branch_depth)
+        while t < max_steps:
+
+            history.append(ob)
+            h = np.array(history).flatten()
+            h = ob_filter(h)
+
+            act, v, v_imaginated = self.explore_options(h, n_branches, branch_depth)
             vs_imaginated.append(v_imaginated)
             if t >= branch_depth:
                 forecast_errors.append(v - vs_imaginated[branch_depth])
 
-            # act, v = self.agent.get_action_value(ob)
-
-            # self.imagine(ob, ob_filter = ob_filter)
-            # self.imagination.set_state(ob_filter(ob_true))
             ob1, r, done, _ = self.env.step(act)
 
-            # ob_augmented = np.concat((ob, ob_true), axis=0)
-            self.memory.collect((ob, act, r, done, v), t)
-            self.imagination.collect(ob, act)
+            self.memory.collect((h, act, r, done, v), t)
+            self.imagination.collect(h, act)
             ob = ob1.copy()
             ep_l += 1
             ep_r += r
@@ -146,11 +153,11 @@ class Worker(object):
             t += 1
 
         self.t += t
-        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, self.t,
+        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep,
+                                                                                   self.t,
                                                                                    forecast_errors)
-
     def explore_options(self, world_state, n_branches, branch_depths):
-        if n_branches == 0:
+        if n_branches == 0 or self.imagination.is_trained == False:
             act, state_value = self.agent.get_action_value(world_state)
             return act, state_value, 0
 

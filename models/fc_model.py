@@ -5,17 +5,17 @@ from utils.tf_utils import fc
 
 
 class FCModel(object):
-    def __init__(self, obs_dim, acts_dim, lr=1e-2):
+    def __init__(self, obs_dim, acts_dim, is_recurrent=False, lr=1e-2):
         self.obs_dim = obs_dim
         self.acts_dim = acts_dim
         self.global_step = tf.Variable(0, trainable=False, name="global_step")
         self._init_ph()
-        self._build_graph()
+        self._build_graph(is_recurrent=is_recurrent)
         self._train_op()
         self.sess = tf.Session()
         self.saver = tf.train.Saver(var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='fc_model'))
         self.sess.run(tf.global_variables_initializer())
-        self.summary = tf.summary.merge(summarize_tensors([self.loss]))
+        self.summary = tf.summary.merge(summarize_tensors([self.img_loss]))
 
     def _init_ph(self):
         self.obs = tf.placeholder(tf.float32, shape=(None, self.obs_dim))
@@ -23,33 +23,44 @@ class FCModel(object):
         self.acts = tf.placeholder(tf.float32, shape=(None, self.acts_dim))
 
     def _preprocess(self, act=tf.nn.elu):
-        # s = fc(self.obs, h_size=128, act=tf.nn.elu, name='s')
-        # a = fc(self.acts, h_size=128, act=tf.nn.elu, name='a')
-        # s1 = fc(self.obs1, h_size=128, act=tf.nn.elu, name='s1')
         s = self.obs
         a = self.acts
         s1 = self.obs1
         return s, a, s1
 
-    def _build_graph(self, n_layers=3):
+    def _build_graph(self, is_recurrent=False, n_layers=3):
         with tf.variable_scope('fc_model'):
             s, a, s1 = self._preprocess()
             x = tf.concat((s, a), axis=1)
+
             h = fc(x, h_size=128, name='fc', act=tf.nn.tanh)
-            for l in range(n_layers):
-                h = fc(h, h_size=256, name='fc_{}'.format(l), act=tf.nn.tanh)
+            if is_recurrent:
+                from tensorflow.contrib.rnn import BasicLSTMCell
+                cell = BasicLSTMCell(num_units=32)
+                h, _ = tf.nn.dynamic_rnn(cell=cell, inputs=tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
+                h = tf.reshape(h, (-1, cell.state_size.c))
+            else:
+                for l in range(n_layers):
+                    h = fc(h, h_size=256, name='fc_{}'.format(l), act=tf.nn.tanh)
+
             self.s1_tilde = fc(h, h_size=self.obs_dim, name='s1_tilde', act=None)
+            self.conf_tilde = fc(h, h_size=1, name='conf', act=None)
 
     def _train_op(self, lr=1e-4):
-        self.loss = tf.reduce_mean(tf.square(self.s1_tilde - self.obs1))
+        self.img_loss = tf.reduce_mean(tf.square(self.s1_tilde - self.obs1))
+        self.conf_loss = tf.reduce_mean(tf.square(self.conf_tilde - self.img_loss))
 
-        # learning_rate = tf.train.exponential_decay(lr, self.global_step, 1024 * 3, 0.96, staircase=True)
-        learning_rate = lr
-        self.optim = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss,
-                                                                                  global_step=self.global_step)
+        self.train_conf = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.conf_loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope ='fc_model/conf'))
 
-    def train(self, obs, acts, obs1):
-        _, loss = self.sess.run([self.optim, self.loss], feed_dict={
+        self.train_img = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.img_loss, global_step=self.global_step)
+
+    def train(self, obs, acts, obs1, m = 0):
+        if m == 0:
+            fetches  = [self.train_img, self.img_loss]
+        else:
+            fetches = [self.train_conf, self.conf_loss]
+
+        _, loss = self.sess.run(fetches, feed_dict={
             self.obs: obs,
             self.acts: acts,
             self.obs1: obs1
@@ -60,7 +71,7 @@ class FCModel(object):
         return self.sess.run(self.s1_tilde, feed_dict={self.obs: [obs], self.acts: [acts]})
 
     def eval(self, obs, acts, obs1):
-        loss = self.sess.run(self.loss,
+        loss = self.sess.run(self.img_loss,
                              feed_dict={self.obs: obs,
                                         self.acts: acts,
                                         self.obs1: obs1})

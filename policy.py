@@ -4,11 +4,11 @@ from utils.tf_utils import fc, GaussianPD, get_params, _clip_grad
 
 
 class PolicyNetwork(object):
-    def __init__(self, name, obs_dim, act_dim, kl_target=0.003, eta=50, act=tf.tanh, h_size=(128, 64, 32)):
+    def __init__(self, name, obs_dim, act_dim, kl_target=0.003, eta=50, act=tf.tanh, h_size=(128, 64, 32), is_recurrent = False):
         self.name = name
         with tf.variable_scope(name):
             self._init_ph(obs_dim, act_dim)
-            self._init_network(act_dim, act=act, h_size=h_size)
+            self._init_network(act_dim, act=act, h_size=h_size, is_recurrent=is_recurrent)
             self._params = get_params(name)
             self._init_pi(act_dim)
             self.losses = self.train_op(kl_target, eta)
@@ -23,16 +23,18 @@ class PolicyNetwork(object):
         self.mu_old = tf.placeholder('float32', (None, act_dim), name='mu_old')
         self.logstd_old = tf.placeholder('float32', (1, act_dim), name='logstd_old')
 
-    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.tanh):
+    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.tanh,is_recurrent = False):
         h = fc(self.obs, h_size[0], act=act, name='input')
 
-        # from tensorflow.contrib.rnn import BasicLSTMCell
-        # cell = BasicLSTMCell(num_units=32)
-        # h, _ = tf.nn.dynamic_rnn(cell = cell, inputs= tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
-        # h = tf.reshape(h, (-1,cell.state_size.c))
+        if is_recurrent:
 
-        for i in range(len(h_size)):
-            h = fc(h, h_size[i], act=act, name='h{}'.format(i))
+            from tensorflow.contrib.rnn import BasicLSTMCell
+            cell = BasicLSTMCell(num_units=32)
+            h, _ = tf.nn.dynamic_rnn(cell = cell, inputs= tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
+            h = tf.reshape(h, (-1,cell.state_size.c))
+        else:
+            for i in range(len(h_size)):
+                h = fc(h, h_size[i], act=act, name='h{}'.format(i))
 
         self.mu = fc(h, act_dim, act=None, name='mu')
         self.logstd = tf.get_variable('log_std', (1, act_dim), tf.float32, tf.zeros_initializer())

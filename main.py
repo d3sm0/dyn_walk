@@ -15,7 +15,6 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 # TODO check for topology (256, 128,64, 32) (256,128,64)
 
-
 def main(config):
     pprint(config)
     logger = Logger(env_name=config['ENV_NAME'], config=config)
@@ -25,28 +24,33 @@ def main(config):
     ob_filter = None
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0],))
-    #worker.warmup(ob_filter, max_steps=config['WARMUP_TIME'])
+    worker.warmup(ob_filter, max_steps=config['WARMUP_TIME'], history_depth=config['CONCATENATE_FRAMES'])
     tf.logging.info('Init training. Stats saved at ' + logger.main_path)
     # Sep-23_12_38
     # oldpi , oldv = worker.agent.sess.run([worker.agent.policy._params , worker.agent.value._params])
     t = 0
     unrolls = 0
-    # dataset_path = 'log-files/InvertedPendulum-v1//dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
-    # worker.imagination.load(data_dir=dataset_path)
+    # dataset_path = None #'log-files/InvertedPendulum-v1/dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
+
+    dataset_path = 'log-files/InvertedPendulum-v1/Sep-24_01_41LOG_BRANCH_WIDTH::4LOG_BRANCH_DEPTH::1'
+    worker.imagination.load(data_dir=dataset_path)
+
     while t < config['MAX_STEPS']:
         sequence, ep_stats = worker.unroll(
             max_steps=config['MAX_STEPS_BATCH'], ob_filter=ob_filter,
             branch_depth=config['LOG_BRANCH_DEPTH'],
-            n_branches=config['LOG_BRANCH_WIDTH']
+            n_branches=config['LOG_BRANCH_WIDTH'],
+            history_depth=config['CONCATENATE_FRAMES']
         )
 
         batch = worker.compute_target(sequence)
 
         dataset = Dataset(dict(obs=batch['obs'], acts=batch['acts'], adv=batch['adv'], tdl=batch['tdl'],
-                               vs=batch['vs']), batch_size=config['BATCH_SIZE'], shuffle=True)
+                               vs=batch['vs']), batch_size=config['BATCH_SIZE'],
+                          shuffle=False if config['POLICY'] == 'recurrent' else True)
 
         train_stats, network_stats = worker.agent.train(dataset, num_iter=config['NUM_ITER'], eps=config['EPS'])
-        model_stats = worker.imagination.train()
+        model_stats = worker.imagination.train(shuffle=False if config['IMG_MODEL'] == 'recurrent' else True)
 
         logger.log(merge_dicts(train_stats, ep_stats, model_stats))
         # if t % config['REPORT_EVERY'] == 0:

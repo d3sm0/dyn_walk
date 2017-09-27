@@ -9,10 +9,10 @@ from value import ValueNetwork
 
 
 class Agent(object):
-    def __init__(self, obs_dim, act_dim, kl_target=1e-2, eta=1000, beta=1.0, h_size=(128, 64, 32)):
+    def __init__(self, obs_dim, act_dim, kl_target=1e-2, eta=1000, beta=1.0, h_size=(128, 64, 32), is_recurrent = False):
         # obs_dim *= 2 # TODO fill the other state
         self.policy = PolicyNetwork(name='pi', obs_dim=obs_dim, act_dim=act_dim, eta=eta, h_size=h_size,
-                                    kl_target=kl_target)
+                                    kl_target=kl_target, is_recurrent=is_recurrent)
         self.value = ValueNetwork(name='vf', obs_dim=obs_dim, h_size=h_size)
         self.kl_target = kl_target
         self.beta = beta

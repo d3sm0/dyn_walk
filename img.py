@@ -12,7 +12,7 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Imagination(object):
-    def __init__(self, obs_dim, acts_dim, model_path=None, model='vae', z_dim=None):
+    def __init__(self, obs_dim, acts_dim, model_path=None, model='vae', z_dim=None, is_recurrent=False):
         self.s, self.a = [], []
         self.obs_dim = obs_dim
         self.acts_dim = acts_dim
@@ -20,11 +20,11 @@ class Imagination(object):
         self.model_name = model
         if self.model_name == 'vae':
             assert z_dim is not None
-            self.model = VAE(obs_dim=obs_dim, acts_dim=acts_dim, z_dim=z_dim, batch_size=64)
+            self.model = VAE(obs_dim=obs_dim, acts_dim=acts_dim, z_dim=z_dim, batch_size=64, is_recurrent=is_recurrent)
         elif self.model_name == 'fc':
-            self.model = FCModel(obs_dim=obs_dim, acts_dim=acts_dim)
+            self.model = FCModel(obs_dim=obs_dim, acts_dim=acts_dim, is_recurrent=is_recurrent)
 
-        self.model_path = model_path + model
+        self.model_path = model_path
 
     def set_state(self, state):
         self.state = state
@@ -42,9 +42,7 @@ class Imagination(object):
         self.s.append(s)
         self.a.append(a)
 
-    def train(self, iter_batch=20, dataset=None, verbose=False):
-        return {'model_avg_loss':0}
-
+    def train(self, iter_batch=20, dataset=None, verbose=False, shuffle=True):
         losses = []
         i = 0
         if dataset is None:
@@ -52,19 +50,22 @@ class Imagination(object):
                 'obs': np.vstack(self.s[:-1]),
                 'acts': np.vstack(self.a[:-1]),
                 'obs1': np.vstack(self.s[1:]),
-            }, shuffle=True)
+            }, shuffle=shuffle)
 
-        for _ in range(iter_batch):
-            for batch in dataset.iterate_once():
-                s0 = batch['obs']
-                s1 = batch['obs1']
-                acts = batch['acts']
-                stats = self.model.train(s0, acts, s1)
-                losses.append(stats)
-                i += 1
-                if verbose and i % 100 == 0:
-                    tf.logging.info('Dataset covered {}. current loss {}'.format(i / dataset.n, stats))
-        return {'model_avg_loss': np.mean(losses)}
+        stats = []
+        for m in range(2):
+            for _ in range(iter_batch):
+                for batch in dataset.iterate_once():
+                    s0 = batch['obs']
+                    s1 = batch['obs1']
+                    acts = batch['acts']
+                    stat = self.model.train(s0, acts, s1, m)
+                    losses.append(stat)
+                    i += 1
+                    if verbose and i % 100 == 0:
+                        tf.logging.info('Dataset covered {}. current loss {}'.format(i / dataset.n, stat))
+            stats.append(losses)
+        return {'model_avg_loss': np.array(stats).mean(axis = 0)}
 
     @staticmethod
     def calc_reward(s0, a, s1):
@@ -97,35 +98,36 @@ class Imagination(object):
                     tf.logging.info('Dataset covered {}. current loss {}'.format(i / dataset.n, stats))
         return {'avg_loss': np.mean(losses)}
 
-    def pretrain_model(self, data_dir, verbose=True):
+    def pretrain_model(self, data_dir, concat_frames=1, verbose=True, shuffle=True):
         data = load_data(data_dir=data_dir)
         assert data is not None
-        train_set, test_set = train_test_set(datasets=data)
+        train_set, test_set = train_test_set(datasets=data, concat_frames=concat_frames)
 
         train_loss = self.train(
-            dataset=Dataset(data={'obs': train_set[0], 'acts': train_set[1], 'obs1': train_set[2]}, shuffle=True),
+            dataset=Dataset(data={'obs': train_set[0], 'acts': train_set[1], 'obs1': train_set[2]}, shuffle=shuffle),
             iter_batch=1, verbose=verbose)
-
         tf.logging.info('Testing results. Train loss: {}'.format(train_loss))
+
+
         test_loss = self.eval_model(
-            dataset=Dataset(data={'obs': test_set[0], 'acts': test_set[1], 'obs1': test_set[2]}, shuffle=True),
+            dataset=Dataset(data={'obs': test_set[0], 'acts': test_set[1], 'obs1': test_set[2]}, shuffle=shuffle),
             iter_batch=1, verbose=verbose)
         tf.logging.info('Pre train finished. Test loss: {}'.format(test_loss))
 
         _save(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
         self.is_trained = True
-
         return {'train_loss': train_loss, 'test_loss': test_loss}
 
-    def load(self, data_dir = None):
+    def load(self, data_dir=None):
         try:
             _load(saver=self.model.saver, sess=self.model.sess, log_dir=self.model_path)
         except Exception as e:
-            tf.logging.error('Failed model to restore, retraining', e)
-            if data_dir is not None: self.pretrain_model(data_dir)
+            tf.logging.error('Failed model to restore, retraining')
+            if data_dir is not None:
+                self.pretrain_model(data_dir)
             else:
-                raise e
-
+                self.is_trained = False
+                tf.logging.error('Dataset not found. The model will not be used in this run')
 
 
 if __name__ == "__main__":
@@ -137,25 +139,23 @@ if __name__ == "__main__":
     with open('config.json') as f:
         config = json.load(f)
 
-    dataset_path = 'log-files/InvertedPendulum-v1/Sep-22_15_10'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
+    dataset_path = 'log-files/Walker2d-v1/Sep-24_10_18LOG_BRANCH_WIDTH::0LOG_BRANCH_DEPTH::0'# 'log-files/InvertedPendulum-v1/Sep-24_01_41LOG_BRANCH_WIDTH::4LOG_BRANCH_DEPTH::1'
+
+    # dataset_path = 'log-files/InvertedPendulum-v1'  # 'log-files/InvertedPendulum-v1/Sep-23_12_38'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
     worker = Worker(config, log_dir=dataset_path)
-    # _load(sess = worker.agent.sess, saver = worker.agent.saver,log_dir='log-files/old_logs/Sep-19_01_19')
-    img = Imagination(obs_dim=worker.env_dim[0], acts_dim=worker.env_dim[1], model_path='tf-models/', model='vae',
-                      z_dim=2)
 
-    # dataset = Imagination.build_dataset(log_dir=dataset_path + '/dataset')
-
-    try:
-        img.load()
-    except Exception as e:
-        tf.logging.info('Pre training model')
-        img.pretrain_model(data_dir=dataset_path + '/dataset')
+    # try:
+    #     worker.imagination.load()
+    # except Exception as e:
+    tf.logging.info('Pre training model')
+    worker.imagination.pretrain_model(data_dir=dataset_path + '/dataset',
+                                      concat_frames=config['CONCATENATE_FRAMES'])
 
     ob_filter = ZFilter((worker.env_dim[0],))
 
     TEST_RUNS = 1000
-    worker.warmup(ob_filter, 60)
-    # img.reset(ob1)
+    worker.warmup(ob_filter, 60, history_depth=config['CONCATENATE_FRAMES'])
+    # worker.imagination.reset(ob1)
     losses_v = []
     obs = []
     losses_v = 0
@@ -163,32 +163,38 @@ if __name__ == "__main__":
     obs = []
     ep_loss_v = []
     ep_loss_r = []
+    from collections import deque
+
+    history = deque(maxlen=config["CONCATENATE_FRAMES"])
+
     for _ in range(TEST_RUNS):
         done = False
         ob = worker.env.reset()
-        img.set_state(ob)
+        history.append(ob)
         while not done:
             # worker.env.render()
-            ob = ob_filter(ob)
 
-            act, _ = worker.agent.get_action_value(ob)
-
-            # img.set_state(ob)  # follow the ground truth
-            ob1_tilde, reward_tilde, done, _ = img.step(act)
-
+            history.append(ob)
+            h = ob_filter(np.array(history).flatten())
+            worker.imagination.set_state(h)
+            act, _ = worker.agent.get_action_value(h)
+            # worker.imagination.set_state(ob)  # follow the ground truth
+            ob1_tilde, reward_tilde, done, _ = worker.imagination.step(act)
             ob1, r, done, _ = worker.env.step(act)
+
             obs.append((ob1_tilde[1] - ob1[1]))
-            v = worker.agent.get_value([ob1])
+            v = worker.agent.get_value(h)
             ob1 = 0
             loss_r = 0.5 * np.square(reward_tilde - r)
 
-            v_tilde = worker.agent.get_value([ob1_tilde])
+            v_tilde = worker.agent.get_value(h)
 
             loss_v = 0.5 * np.square(v_tilde - v)
             losses_v += loss_v
             losses_r += loss_r
 
             ob = ob1_tilde.copy()
+
         ep_loss_v.append(losses_v)
         ep_loss_r.append(losses_r)
         losses_r = losses_v = 0

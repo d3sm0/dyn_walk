@@ -54,10 +54,14 @@ import glob
 from tensorflow import logging
 
 
-def train_test_set(datasets, split_size=.3):
+def train_test_set(datasets, split_size=.3, concat_frames=1):
+    assert len(datasets['obs'] > 0)
+
     maxlen = int(len(datasets['obs']) / 1)
-    obs0 = datasets['obs'][:-1][:maxlen]
-    obs1 = datasets['obs'][1:][:maxlen]
+    obs = np.reshape(datasets['obs'][:maxlen], (-1, datasets['obs'][0].shape[0] *  concat_frames))
+
+    obs0 = obs[:-1][:maxlen].copy()
+    obs1 = obs[1:][:maxlen].copy()
     acts = datasets['acts'][:-1][:maxlen]
 
     # TODO you may want to sample randomly here
