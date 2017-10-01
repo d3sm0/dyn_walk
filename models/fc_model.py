@@ -3,6 +3,9 @@ from tensorflow.contrib.layers import summarize_tensors
 
 from utils.tf_utils import fc
 
+from scipy import spatial
+import numpy as np
+
 
 class FCModel(object):
     def __init__(self, obs_dim, acts_dim, is_recurrent=False, lr=1e-2):
@@ -50,13 +53,14 @@ class FCModel(object):
         self.img_loss = tf.reduce_mean(tf.square(self.s1_tilde - self.obs1))
         self.conf_loss = tf.reduce_mean(tf.square(self.conf_tilde - self.img_loss))
 
-        self.train_conf = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.conf_loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope ='fc_model/conf'))
+        self.train_conf = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.conf_loss, var_list=tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope='fc_model/conf'))
 
         self.train_img = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.img_loss, global_step=self.global_step)
 
-    def train(self, obs, acts, obs1, m = 0):
+    def train(self, obs, acts, obs1, m=0):
         if m == 0:
-            fetches  = [self.train_img, self.img_loss]
+            fetches = [self.train_img, self.img_loss]
         else:
             fetches = [self.train_conf, self.conf_loss]
 
@@ -76,3 +80,9 @@ class FCModel(object):
                                         self.acts: acts,
                                         self.obs1: obs1})
         return loss
+
+    def confidence(self, obs, acts):
+        conf_tilde = self.sess.run(self.conf_tilde,
+                                   feed_dict={self.obs: [obs],
+                                              self.acts: [acts]})
+        return 1 - abs(conf_tilde)

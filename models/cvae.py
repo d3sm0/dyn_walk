@@ -31,7 +31,7 @@ class VAE:
         self.sess = tf.Session()
         self.saver = tf.train.Saver(var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='vae'))
         self.sess.run(tf.global_variables_initializer())
-        self.summary = tf.summary.merge(summarize_tensors([self.loss, self.kl, self.z, self.mean, self.sd]))
+        self.summary = tf.summary.merge(summarize_tensors([self.img_loss, self.kl, self.z, self.mean, self.sd]))
 
     def _init_ph(self):
         self.obs = tf.placeholder(tf.float32, shape=[None, self.obs_dim])
@@ -76,9 +76,24 @@ class VAE:
         self.kl = tf.reduce_mean(kl, name='kl')
 
         log_lk = self.log_lik_bernoulli(self.obs1, self.decoded)
-        self.loss = tf.reduce_mean(kl - log_lk, name='elbo')
+        self.img_loss = tf.reduce_mean(kl - log_lk, name='elbo')
 
-        self.optim = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss)
+        self.conf_tilde = fc(self.decoded, h_size=1, name='conf', act=None)
+
+        self.conf_loss = tf.reduce_mean(tf.square(self.img_loss - self.conf_tilde))
+
+        self.train_conf = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.conf_loss,
+                                                                              var_list=tf.get_collection(
+                                                                                  tf.GraphKeys.TRAINABLE_VARIABLES,
+                                                                                  scope='conf'))
+
+        self.train_img = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.img_loss)
+
+    def confidence(self, obs, acts):
+        conf_tilde = self.sess.run(self.conf_tilde,
+                                   feed_dict={self.obs: [obs],
+                                              self.acts: [acts]})
+        return 1 - abs(conf_tilde)
 
     @staticmethod
     def d_kl(mu, sigma, eps=1e-8):
@@ -112,19 +127,33 @@ class VAE:
 
         return log_like
 
-    def train(self, obs, acts, obs1):
-        """
-        Performs one mini batch update of parameters for both inference
-        and generative networks.
+    def train(self, obs, acts, obs1, m=0):
+        if m == 0:
+            fetches = [self.train_img, self.img_loss]
+        else:
+            fetches = [self.train_conf, self.conf_loss]
 
-        :param x: Mini batch of input data points.
-        :return: loss: Total loss (KL + NLL) for mini batch.
-        """
-        _, loss = self.sess.run([self.optim, self.loss],
-                                feed_dict={self.obs: obs,
-                                           self.acts: acts,
-                                           self.obs1: obs1})
+        _, loss = self.sess.run(fetches, feed_dict={
+            self.obs: obs,
+            self.acts: acts,
+            self.obs1: obs1
+        })
         return loss
+
+
+    # def train(self, obs, acts, obs1):
+    #     """
+    #     Performs one mini batch update of parameters for both inference
+    #     and generative networks.
+    #
+    #     :param x: Mini batch of input data points.
+    #     :return: loss: Total loss (KL + NLL) for mini batch.
+    #     """
+    #     _, loss = self.sess.run([self.train_img, self.img_loss],
+    #                             feed_dict={self.obs: obs,
+    #                                        self.acts: acts,
+    #                                        self.obs1: obs1})
+    #     return loss
 
     def get_pi_z(self, obs, acts):
         """
@@ -149,7 +178,7 @@ class VAE:
         return self.sess.run(self.decoded, feed_dict={self.obs: [obs], self.acts: [acts]})
 
     def eval(self, obs, acts, obs1):
-        loss = self.sess.run(self.loss,
+        loss = self.sess.run(self.img_loss,
                              feed_dict={self.obs: obs,
                                         self.acts: acts,
                                         self.obs1: obs1})

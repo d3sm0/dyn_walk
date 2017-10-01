@@ -25,7 +25,7 @@ def main():
     idx = 0
     for _ in range(2):
         for batch in dataset.iterate_once():
-            loss , kl , _ , summary = vae.sess.run([vae.loss , vae.kl , vae.train , vae.summary] , feed_dict={
+            loss , kl , _ , summary = vae.sess.run([vae.img_loss , vae.kl , vae.train , vae.summary], feed_dict={
                 vae.obs: batch['obs'] ,
                 vae.obs1: batch['obs1'] ,
                 vae.acts: batch['acts']

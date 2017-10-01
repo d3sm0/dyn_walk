@@ -90,7 +90,10 @@ def load_data(data_dir):
 
 def build_dataset(data_dir):
     datasets = {}
-    names = list(glob.glob(data_dir + "/dump_*"))
+    path = data_dir.split('/')
+    path[-2] = '*'
+    glob_dir= '/'.join(path)
+    names = list(glob.glob(glob_dir + "/dump_*"))
     i = 0
     for file_name in names:
         i += 1
@@ -106,6 +109,8 @@ def build_dataset(data_dir):
                         datasets[k] = np.append(datasets[k], v)
                     else:
                         datasets[k] = np.concatenate((datasets[k], v), axis=0)
+    if os.path.exists(data_dir + '/dataset.pkl'): raise FileExistsError()
+
     with open(data_dir + '/dataset.pkl', "wb") as fout:
         pickle.dump(datasets, fout)
         logging.info('Dataset saved')

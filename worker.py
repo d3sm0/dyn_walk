@@ -29,6 +29,9 @@ class Worker(object):
         self.lam = config['LAMBDA']
         self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
                              main_path=log_dir)
+
+        self.img_memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
+                                 main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
         self.t = 0
@@ -117,29 +120,44 @@ class Worker(object):
                 raise NotImplementedError()
         return env, env_dims, split_obs
 
-    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, branch_depth=1, history_depth=1):
+    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, history_depth=1):
         ob = self.env.reset()
         t, ep, ep_r, ep_l = 0, 0, 0, 0
         ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
         vs_imaginated = deque(maxlen=10)
-        forecast_errors = []
+        ah = deque(maxlen=4)
+        for _ in range(4):
+            ah.append([])
         history = deque(maxlen=history_depth)
         history.append(ob)
-
+        d_mean = []
         while t < max_steps:
 
             history.append(ob)
             h = np.array(history).flatten()
             h = ob_filter(h)
 
-            act, v, v_imaginated = self.explore_options(h, n_branches, branch_depth)
+            act, v, v_imaginated, depths, action_history, steps = self.explore_options(h, n_branches)
+
+            ah.append(action_history)
+            # act = act / 2
+            # ds = [8., 4.,2,1]
+            # ds = [d/sum(ds) for d in ds]
+            # for idx, d in enumerate(ds):
+            #     if idx == 0:
+            #         act = act * d
+            #     else:
+            #         if len(ah[-idx]) > idx:
+            #             act += ah[-idx][idx] * d
+            #         else:
+            #             act += act * d
             vs_imaginated.append(v_imaginated)
-            if t >= branch_depth:
-                forecast_errors.append(v - vs_imaginated[branch_depth])
+            d_mean.append(depths[0])
 
             ob1, r, done, _ = self.env.step(act)
-
-            self.memory.collect((h, act, r, done, v), t)
+            for step in steps:
+                self.memory.collect(step)
+            self.memory.collect((h, act, r, done, v))
             self.imagination.collect(h, act)
             ob = ob1.copy()
             ep_l += 1
@@ -153,30 +171,51 @@ class Worker(object):
             t += 1
 
         self.t += t
-        return self.memory.release(v=v, done=done, t=self.t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep,
-                                                                                   self.t,
-                                                                                   forecast_errors)
-    def explore_options(self, world_state, n_branches, branch_depths):
+        return self.memory.release(v=v, done=done, t=t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep,
+                                                                                   self.t, d_mean)
+
+    def explore_options(self, world_state, n_branches, th=.75):
+
         if n_branches == 0 or self.imagination.is_trained == False:
             act, state_value = self.agent.get_action_value(world_state)
-            return act, state_value, 0
+            return act, state_value, 0, (0, 0), [],[]
 
-        actions, scores = [], []
+        actions, scores, confs, depths, rs = [], [], [], [], []
+        actions_history = []
+        steps = []
         for branch in range(n_branches):
             self.imagination.set_state(world_state)
-            # world_state.copy()
+
             act, state_value = self.agent.get_action_value(world_state)
+            prob = 1.
             actions.append(act)
-            for step in range(branch_depths - 1):
-                imgaginated_ob, _, _, _ = self.imagination.step(act)
-                act, state_value = self.agent.get_action_value(imgaginated_ob)
+            actions_history.append([])
+            ep_r = 0
+            for depth in range(10):
+
+                # done is always set to false in the imagination
+                imaginated_ob, r, done, _ = self.imagination.step(act)
+                ep_r += r
+                prob *= self.imagination.model.confidence(obs=imaginated_ob, acts=act)
+                act, state_value = self.agent.get_action_value(imaginated_ob)
+                if prob < th:
+                    break
+                actions_history[-1].append(act)
+                steps.append((imaginated_ob, act, r, done, state_value))
+
+            # [None]*(memory_depth - depth)
             scores.append(state_value)
-        act = actions[np.argmax(scores)]
+            rs.append(ep_r)
+            depths.append(depth)
+        best_branch = np.argmax(scores)
+        act = actions[best_branch]
+        action_history = actions_history[best_branch]
         v = self.agent.get_value(state=world_state)
-        return act, v, max(scores)
+        depths = np.array(depths)
+        return act, v, max(scores), (depths.mean(), depths.var()), action_history, steps
 
     @staticmethod
-    def compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, forecast_error):
+    def compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, depth_mean):
         ep_stats = {
             'last_ep_rw': ep_r,
             'last_ep_len': ep_l,
@@ -184,7 +223,8 @@ class Worker(object):
             'avg_len': np.array(ep_ls).mean(),
             'total_steps': t,
             'total_ep': ep,
-            'forecast_error': sum(forecast_error) / len(forecast_error),
+            # 'forecast_error': sum(forecast_error) / len(forecast_error),
+            'depth_mean': np.array(depth_mean).mean()
         }
         return ep_stats
 

@@ -1,5 +1,5 @@
 {
-  "ENV_NAME": "Walker2d-v1",
+  "ENV_NAME": "InvertedPendulum-v1",
   "CONCATENATE_FRAMES": 1,
   "FRAME_RATE": 50,
   "USE_RW": false,
@@ -22,7 +22,6 @@
   "IS_RECURRENT":false,
   "SAVE_EVERY": 32768,
   "REPORT_EVERY": 4096,
-  "LOG_BRANCH_DEPTH": 0,
-  "LOG_BRANCH_WIDTH": 0,
+  "LOG_BRANCH_WIDTH": 1,
   "LAST_RUN":false
 }

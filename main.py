@@ -12,7 +12,11 @@ from pprint import pprint
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-
+tf.set_random_seed(10)
+import numpy as np
+import random
+np.random.seed(10)
+random.seed(10)
 # TODO check for topology (256, 128,64, 32) (256,128,64)
 
 def main(config):
@@ -32,16 +36,13 @@ def main(config):
     unrolls = 0
     # dataset_path = None #'log-files/InvertedPendulum-v1/dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
 
-    dataset_path = 'log-files/InvertedPendulum-v1/Sep-24_01_41LOG_BRANCH_WIDTH::4LOG_BRANCH_DEPTH::1'
+    dataset_path = 'log-files/InvertedPendulum-v1/dataset' #'log-files/InvertedPendulum-v1dataset'
     worker.imagination.load(data_dir=dataset_path)
 
     while t < config['MAX_STEPS']:
-        sequence, ep_stats = worker.unroll(
-            max_steps=config['MAX_STEPS_BATCH'], ob_filter=ob_filter,
-            branch_depth=config['LOG_BRANCH_DEPTH'],
-            n_branches=config['LOG_BRANCH_WIDTH'],
-            history_depth=config['CONCATENATE_FRAMES']
-        )
+        sequence, ep_stats = worker.unroll(max_steps=config['MAX_STEPS_BATCH'], ob_filter=ob_filter,
+                                           n_branches=config['LOG_BRANCH_WIDTH'],
+                                           history_depth=config['CONCATENATE_FRAMES'])
 
         batch = worker.compute_target(sequence)
 

@@ -40,14 +40,15 @@ class Dataset(object):
 
 
 class Memory(object):
-    def __init__(self, obs_dim, act_dim, max_steps, main_path):
-        self.max_steps = max_steps
+    def __init__(self, obs_dim, act_dim, max_steps, main_path, branch_width = 4, max_branch_depth = 10):
+        self.max_steps = max_steps * (branch_width * max_branch_depth + 1)
         self.inits = (np.zeros((obs_dim,)), np.zeros((act_dim,)))
         try:
             os.makedirs(os.path.join(main_path, 'dataset'))
         except:
             pass
         self.log_dir = os.path.join(main_path, 'dataset')
+        self.t = 0
         self.reset()
 
     def reset(self):
@@ -57,28 +58,28 @@ class Memory(object):
         self.rws = np.zeros(self.max_steps, 'float32')
         self.vs = np.zeros(self.max_steps, 'float32')
         self.ds = np.zeros(self.max_steps, 'int32')
+        self.t = 0
 
-    def collect(self, step, t):
+    def collect(self, step):
         ob, act, r, d, v = step
-        i = t % self.max_steps
-        self.obs[i] = ob
-        self.acts[i] = act
-        self.rws[i] = r
-        self.vs[i] = v
-        self.ds[i] = d
+        self.t += 1
+        self.obs[self.t] = ob
+        self.acts[self.t] = act
+        self.rws[self.t] = r
+        self.vs[self.t] = v
+        self.ds[self.t] = d
 
-    def release(self, v, done, t):
+    def release(self, v, done,t):
         m = {
-            'obs': self.obs,
-            'acts': self.acts,
-            'rws': self.rws,
-            'vs': self.vs,
+            'obs': self.obs[:self.t],
+            'acts': self.acts[:self.t],
+            'rws': self.rws[:self.t],
+            'vs': self.vs[:self.t],
             'v_next': v * (1 - done),
-            'ds': self.ds
+            'ds': self.ds[:self.t]
         }
         self.save(m, t)
-        # TODO is this needed?
-        # self.reset()
+        self.reset()
         return m
 
     def save(self, memory, time_steps):
