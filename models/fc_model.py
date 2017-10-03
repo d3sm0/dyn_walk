@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.contrib.layers import summarize_tensors
 
 from utils.tf_utils import fc
-
+from kafnets.tf_kafnets import KAFNet
 from scipy import spatial
 import numpy as np
 
@@ -31,12 +31,16 @@ class FCModel(object):
         s1 = self.obs1
         return s, a, s1
 
-    def _build_graph(self, is_recurrent=False, n_layers=3):
+    def _build_graph(self, is_recurrent=False, n_layers=3, act = tf.nn.tanh, dict_size = 10):
         with tf.variable_scope('fc_model'):
             s, a, s1 = self._preprocess()
             x = tf.concat((s, a), axis=1)
+            d = tf.linspace(start=-2., stop=2., num=dict_size)
 
-            h = fc(x, h_size=128, name='fc', act=tf.nn.tanh)
+            h = fc(x, h_size=128, name='fc', act=act)
+
+            # alpha = tf.get_variable('fc_a', shape=(128, dict_size))
+            # h = KAFNet.kaf(linear=h, D=d, alpha=alpha, kernel='rbf')
             if is_recurrent:
                 from tensorflow.contrib.rnn import BasicLSTMCell
                 cell = BasicLSTMCell(num_units=32)
@@ -44,7 +48,9 @@ class FCModel(object):
                 h = tf.reshape(h, (-1, cell.state_size.c))
             else:
                 for l in range(n_layers):
-                    h = fc(h, h_size=256, name='fc_{}'.format(l), act=tf.nn.tanh)
+                    h = fc(h, h_size=128, name='fc_{}'.format(l), act=act)
+                    # alpha = tf.get_variable('fc_{}'.format(l), shape=(128, dict_size))
+                    # h = KAFNet.kaf(kernel='periodic', linear=h, D=d, alpha=alpha)
 
             self.s1_tilde = fc(h, h_size=self.obs_dim, name='s1_tilde', act=None)
             self.conf_tilde = fc(h, h_size=1, name='conf', act=None)

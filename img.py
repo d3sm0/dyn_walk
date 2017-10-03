@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from scipy.spatial import KDTree
 
 from memory.dataset import Dataset
 from models.cvae import VAE
@@ -71,10 +70,6 @@ class Imagination(object):
 
 
 
-        # Xs = np.concatenate((dataset.data['obs'], dataset.data['acts']), axis=1)
-        # # double check this
-        # self.tree = KDTree(Xs)
-        # l2s = [0, 0]
         i = 0
         for _ in range(iter_batch):
             for batch in dataset.iterate_once():
@@ -152,20 +147,6 @@ class Imagination(object):
                 self.is_trained = False
                 tf.logging.error('Dataset not found. The model will not be used in this run')
 
-    def confidence(self, obs, acts):
-        # conf_tilde = self.sess.run(self.conf_tilde,
-        #                            feed_dict={self.obs: [obs],
-        #                                       self.acts: [acts]})
-        # return 1-abs(conf_tilde)
-        x = np.concatenate((obs, acts),axis = 0)
-        distance, idx = self.tree.query(x)
-        # nn = self.tree.query(x  )
-        # d = spatial.distance.euclidean(nn, x)
-        return 1-np.clip(distance, 0,1)
-
-
-    def train_conf_kdtree(self, obs, acts, obs1):
-        self.tree = KDTree(np.concatenate((obs, acts), axis=1))
 
 
 if __name__ == "__main__":
@@ -188,19 +169,6 @@ if __name__ == "__main__":
     Xs = np.concatenate((obs, acts), axis = 1)
     idxs = np.random.randint(0,Xs.shape[0], size = 2)
     sx = Xs[idxs]
-    print(np.linalg.norm(sx, axis =0))
-
-
-    # tree = KDTree(Xs)
-    # import random
-    #
-    # for x in Xs:
-    #
-    #     x = x + np.random.normal(size=x.shape[0])
-    #     distance, idx = tree.query(x)
-    #     print(distance, idx)
-    #
-
 
 
 

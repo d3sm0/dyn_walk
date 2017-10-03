@@ -4,7 +4,8 @@ from utils.tf_utils import fc, GaussianPD, get_params, _clip_grad
 
 
 class PolicyNetwork(object):
-    def __init__(self, name, obs_dim, act_dim, kl_target=0.003, eta=50, act=tf.tanh, h_size=(128, 64, 32), is_recurrent = False):
+    def __init__(self, name, obs_dim, act_dim, kl_target=0.003, eta=50, act=tf.tanh, h_size=(128, 64, 32),
+                 is_recurrent=False):
         self.name = name
         with tf.variable_scope(name):
             self._init_ph(obs_dim, act_dim)
@@ -19,23 +20,26 @@ class PolicyNetwork(object):
         self.acts = tf.placeholder('float32', (None, act_dim), name='action')
         self.adv = tf.placeholder('float32', (None), name='advantage')
         self.beta = tf.placeholder('float32', (), name='beta')
-        # self.lr = tf.placeholder('float32' , () , name='lr')
         self.mu_old = tf.placeholder('float32', (None, act_dim), name='mu_old')
         self.logstd_old = tf.placeholder('float32', (1, act_dim), name='logstd_old')
 
-    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.tanh,is_recurrent = False):
+    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.nn.tanh, is_recurrent=False):
         h = fc(self.obs, h_size[0], act=act, name='input')
-
+        d = tf.linspace(start=-2., stop=2., num=30)
+        # alpha = tf.get_variable('fc_a', shape = (128, 30))
+        # from kafnets.tf_kafnets import KAFNet
+        # h = KAFNet.kaf(linear=h, D = d, alpha = alpha)
         if is_recurrent:
 
             from tensorflow.contrib.rnn import BasicLSTMCell
             cell = BasicLSTMCell(num_units=32)
-            h, _ = tf.nn.dynamic_rnn(cell = cell, inputs= tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
-            h = tf.reshape(h, (-1,cell.state_size.c))
+            h, _ = tf.nn.dynamic_rnn(cell=cell, inputs=tf.expand_dims(h, [0]), time_major=False, dtype=tf.float32)
+            h = tf.reshape(h, (-1, cell.state_size.c))
         else:
             for i in range(len(h_size)):
                 h = fc(h, h_size[i], act=act, name='h{}'.format(i))
-
+                # alpha = tf.get_variable(name = 'h{}'.format(i), shape = (h_size[i],30))
+                # h = KAFNet.kaf(linear=h, D=d, alpha=alpha, kernel='periodic')
         self.mu = fc(h, act_dim, act=None, name='mu')
         self.logstd = tf.get_variable('log_std', (1, act_dim), tf.float32, tf.zeros_initializer())
         self.std = tf.exp(self.logstd)
@@ -50,19 +54,6 @@ class PolicyNetwork(object):
         self.sample = self.pi.sample()
 
     def train_op(self, kl_target=1e-3, eta=1000, lr=1e-4):
-        # # alternative loss from baseline ppo
-        # # #
-        #
-        # ratio = tf.exp(self.pi.logp(self.acts) - self.pi_old.logp(self.acts))
-        # loss_1 = ratio * self.adv
-        # loss_2 = tf.clip_by_value(ratio , 1 - 0.2 , 1 + 0.2) * self.adv
-        # # # loss_3 = eta * tf.square(tf.maximum(0.0 , self.kl - 2.0 * kl_target))
-        # loss_3 = tf.reduce_mean(self.entropy)
-        # self.loss = -tf.reduce_mean(tf.minimum(loss_1 , loss_2)) # PPO pessimistic surrogate
-        #
-        # print('Trying trusted region')
-        #
-
         loss_1 = -tf.reduce_mean(self.adv * tf.exp(self.pi.logp(self.acts) - self.pi_old.logp(self.acts)))
         loss_2 = tf.multiply(self.beta, self.kl)
         loss_3 = eta * tf.square(tf.maximum(0.0, self.kl - 2.0 * kl_target))

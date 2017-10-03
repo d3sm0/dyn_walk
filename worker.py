@@ -155,8 +155,8 @@ class Worker(object):
             d_mean.append(depths[0])
 
             ob1, r, done, _ = self.env.step(act)
-            for step in steps:
-                self.memory.collect(step)
+            # for step in steps:
+            #     self.memory.collect(step)
             self.memory.collect((h, act, r, done, v))
             self.imagination.collect(h, act)
             ob = ob1.copy()
@@ -174,7 +174,7 @@ class Worker(object):
         return self.memory.release(v=v, done=done, t=t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep,
                                                                                    self.t, d_mean)
 
-    def explore_options(self, world_state, n_branches, th=.75):
+    def explore_options(self, world_state, n_branches, th=.81):
 
         if n_branches == 0 or self.imagination.is_trained == False:
             act, state_value = self.agent.get_action_value(world_state)
@@ -201,9 +201,7 @@ class Worker(object):
                 if prob < th:
                     break
                 actions_history[-1].append(act)
-                steps.append((imaginated_ob, act, r, done, state_value))
-
-            # [None]*(memory_depth - depth)
+            steps.append((imaginated_ob, act, r, done, state_value))
             scores.append(state_value)
             rs.append(ep_r)
             depths.append(depth)
@@ -223,7 +221,6 @@ class Worker(object):
             'avg_len': np.array(ep_ls).mean(),
             'total_steps': t,
             'total_ep': ep,
-            # 'forecast_error': sum(forecast_error) / len(forecast_error),
             'depth_mean': np.array(depth_mean).mean()
         }
         return ep_stats
@@ -231,11 +228,6 @@ class Worker(object):
     def write_summary(self, stats, ep, network_stats=None):
 
         for (k, v) in six.iteritems(stats):
-            # if np.ndim(v) > 1:
-            #     self.ep_summary.value(simple_value=v.mean() , tag='batch_{}_mean'.format(k))
-            #     self.ep_summary.value(simple_value=v.max() , tag='batch_{}_max'.format(k))
-            #     self.ep_summary.value(simple_value=v.min() , tag='batch_{}_min'.format(k))
-            # else:
             self.ep_summary.value.add(simple_value=v, tag=k)
         if network_stats is not None:
             self.writer.add_summary(network_stats, ep)

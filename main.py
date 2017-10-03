@@ -24,7 +24,7 @@ def main(config):
     logger = Logger(env_name=config['ENV_NAME'], config=config)
     logger.save_experiment(config)
     worker = Worker(config, log_dir=logger.main_path)
-
+    # meta_graph_def = tf.train.export_meta_graph(filename=logger.main_path + '/model.meta')
     ob_filter = None
     if config['ENV_NAME'] != 'osim':
         ob_filter = ZFilter((worker.env_dim[0],))
@@ -36,7 +36,7 @@ def main(config):
     unrolls = 0
     # dataset_path = None #'log-files/InvertedPendulum-v1/dataset'  # 'log-files/InvertedPendulum-v1/Sep-22_13_29'
 
-    dataset_path = 'log-files/InvertedPendulum-v1/dataset' #'log-files/InvertedPendulum-v1dataset'
+    dataset_path = 'log-files/Walker2d-v1/dataset' #'log-files/InvertedPendulum-v1/dataset'
     worker.imagination.load(data_dir=dataset_path)
 
     while t < config['MAX_STEPS']:
