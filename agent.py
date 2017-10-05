@@ -9,11 +9,14 @@ from value import ValueNetwork
 
 
 class Agent(object):
-    def __init__(self, obs_dim, act_dim, kl_target=1e-2, eta=1000, beta=1.0, h_size=(128, 64, 32), is_recurrent = False):
-        # obs_dim *= 2 # TODO fill the other state
-        self.policy = PolicyNetwork(name='pi', obs_dim=obs_dim, act_dim=act_dim, eta=eta, h_size=h_size,
-                                    kl_target=kl_target, is_recurrent=is_recurrent)
-        self.value = ValueNetwork(name='vf', obs_dim=obs_dim, h_size=h_size)
+    def __init__(self, obs_dim, act_dim, kl_target=1e-2, eta=1000, beta=1.0, h_size=(128, 64, 32), is_recurrent=False,
+                 act=tf.nn.tanh, dict_size=20):
+
+        if act  != 'kafnet':
+            act = tf.nn.tanh
+        self.policy = PolicyNetwork(name='pi', obs_dim=obs_dim, act_dim=act_dim, kl_target=kl_target, eta=eta,
+                                    h_size=h_size, is_recurrent=is_recurrent, act=act, dict_size=dict_size)
+        self.value = ValueNetwork(name='vf', obs_dim=obs_dim, h_size=h_size, act=act, dict_size=dict_size)
         self.kl_target = kl_target
         self.beta = beta
         self.lr_multiplier = 1.0
@@ -63,8 +66,6 @@ class Agent(object):
         dataset.data['mu_old'], logstd_old = self.get_pi(dataset.data['obs'])
 
         # TODO can i merge the following iters in an efficient way? If so we num_iter can go to 20 instead of 10
-        import time
-        start = time.time()
         for i in range(num_iter):
             for batch in dataset.iterate_once():
                 feed_dict = {self.policy.obs: batch['obs'], self.policy.adv: batch['adv'],
@@ -72,7 +73,6 @@ class Agent(object):
                              self.policy.mu_old: batch['mu_old'],
                              self.policy.logstd_old: logstd_old,
                              self.policy.beta: self.beta,
-                             # self.policy.lr: self.lr_multiplier * lr,
                              }
 
                 policy_loss, kl, entropy, _ = self.sess.run(
@@ -84,20 +84,12 @@ class Agent(object):
                 tf.logging.info('KL too high. Stopping update after {}'.format(i))
                 self.early_stop += 1
                 break
-        print('t1', (time.time() - start) / (num_iter))
-        # feed_dict = {self.value.obs: batch['obs'] , self.value.tdl: batch['tdl'] ,
-        #                                       self.value.value_old: batch['vs']}
-        #     value_loss , _ = self.sess.run([self.value.loss , self.value.train] , feed_dict)
-        # #
 
-        start = time.time()
         for i in range(num_iter):
             for batch in dataset.iterate_once():
-                feed_dict = {self.value.obs: batch['obs'], self.value.tdl: batch['tdl'],
-                             # self.value.value_old: batch['vs']
+                feed_dict = {self.value.obs: batch['obs'], self.value.tdl: batch['tdl']
                              }
                 value_loss, _ = self.sess.run([self.value.loss, self.value.train], feed_dict)
-        print('t2', (time.time() - start) / (num_iter))
         self.update_beta(kl, eps=eps)
 
         stats = {

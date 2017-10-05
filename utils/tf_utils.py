@@ -68,3 +68,14 @@ def _load(saver, sess, log_dir):
     except Exception as e:
         tf.logging.error(e)
         raise e
+
+def set_global_seed(seed = 10):
+
+    tf.set_random_seed(seed)
+    import numpy as np
+    import random
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+

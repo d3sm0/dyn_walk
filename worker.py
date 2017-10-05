@@ -1,54 +1,39 @@
 import tensorflow as tf
 
 from collections import deque
-import os
+
 from agent import Agent
 import numpy as np
 from memory.dataset import Memory
-from img import Imagination
 import six
 
 
 class Worker(object):
     def __init__(self, config, log_dir):
-        self.imagine = False
 
-        self.env, self.env_dim, split_obs = self.init_environment(config)
+        self.env, self.env_dim  = self.init_environment(config)
 
         self.agent = Agent(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], kl_target=config['KL_TARGET'],
                            eta=config['ETA'],
                            beta=config['BETA'], h_size=config['H_SIZE'],
-                           is_recurrent=True if config['POLICY'] == 'recurrent' else False)
+                           is_recurrent=True if config['POLICY'] == 'recurrent' else False,
+                           act = config['ACT'], dict_size=config['DICT_SIZE'])
 
-        model_path = os.path.join(log_dir, config['IMG_MODEL'],
-                                  'recurrent' if config['IS_RECURRENT'] else 'feedforward')
-        self.imagination = Imagination(obs_dim=self.env_dim[0], acts_dim=self.env_dim[1], z_dim=2,
-                                       model=config['IMG_MODEL'],
-                                       model_path=model_path)
         self.gamma = config['GAMMA']
         self.lam = config['LAMBDA']
         self.memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
                              main_path=log_dir)
 
-        self.img_memory = Memory(obs_dim=self.env_dim[0], act_dim=self.env_dim[1], max_steps=config['MAX_STEPS_BATCH'],
-                                 main_path=log_dir)
         self.writer = tf.summary.FileWriter(logdir=log_dir)
         self.ep_summary = tf.Summary()
         self.t = 0
 
-        if config['LAST_RUN']:
-            load_path = os.path.join(os.getcwd(), 'log-files', config['ENV_NAME'], 'last_run')
-            self.agent.load(load_path)
-
-    def warmup(self, ob_filter=lambda x: x, max_steps=64, ep=1, history_depth=1):
+    def warmup(self, ob_filter=lambda x: x, max_steps=64, ep=1 ):
         for e in range(ep):
             ob = self.env.reset()
-            history = deque(maxlen=history_depth)
-            history.append(ob)
             for _ in range(max_steps):
-                history.append(ob)
-                h = ob_filter(np.array(history).flatten())
-                a = self.agent.get_action(h)
+                ob = ob_filter(ob)
+                a = self.agent.get_action(ob)
                 ob, r, t, _ = self.env.step(a)
                 if t:
                     ob = self.env.reset()
@@ -94,71 +79,26 @@ class Worker(object):
 
     @staticmethod
     def init_environment(config):
-        env = None
-        env_dims = None
-        split_obs = None
-        if config['ENV_NAME'] == 'osim':
-            try:
-                from utils.env_wrapper import Environment
-                env = Environment(augment_rw=config['USE_RW'],
-                                  concat=config['CONCATENATE_FRAMES'],
-                                  normalize=config['NORMALIZE'],
-                                  frame_rate=config['FRAME_RATE'])
-                env_dims = env.get_dims()
-                split_obs = env.split_obs
-            except Exception as e:
-                tf.logging.info('Environment not found')
-                raise e
-        else:
-            try:
-                import gym
-                env = gym.make(config['ENV_NAME'])
-                env_dims = (
-                    env.observation_space.shape[0] * config['CONCATENATE_FRAMES'], env.action_space.shape[0],
-                    (env.action_space.low, env.action_space.high))
-            except:
-                raise NotImplementedError()
-        return env, env_dims, split_obs
+        try:
+            import gym
+            env = gym.make(config['ENV_NAME'])
+            env_dims = (
+                env.observation_space.shape[0] , env.action_space.shape[0],
+                (env.action_space.low, env.action_space.high))
+        except:
+            raise NotImplementedError()
+        return env, env_dims
 
-    def unroll(self, max_steps=2048, ob_filter=lambda x: x, n_branches=4, history_depth=1):
+    def unroll(self, max_steps=2048, ob_filter=lambda x: x):
         ob = self.env.reset()
         t, ep, ep_r, ep_l = 0, 0, 0, 0
         ep_rws, ep_ls = deque(maxlen=10), deque(maxlen=10)
-        vs_imaginated = deque(maxlen=10)
-        ah = deque(maxlen=4)
-        for _ in range(4):
-            ah.append([])
-        history = deque(maxlen=history_depth)
-        history.append(ob)
-        d_mean = []
         while t < max_steps:
 
-            history.append(ob)
-            h = np.array(history).flatten()
-            h = ob_filter(h)
-
-            act, v, v_imaginated, depths, action_history, steps = self.explore_options(h, n_branches)
-
-            ah.append(action_history)
-            # act = act / 2
-            # ds = [8., 4.,2,1]
-            # ds = [d/sum(ds) for d in ds]
-            # for idx, d in enumerate(ds):
-            #     if idx == 0:
-            #         act = act * d
-            #     else:
-            #         if len(ah[-idx]) > idx:
-            #             act += ah[-idx][idx] * d
-            #         else:
-            #             act += act * d
-            vs_imaginated.append(v_imaginated)
-            d_mean.append(depths[0])
-
+            ob = ob_filter(ob)
+            act, v = self.agent.get_action_value(ob)
             ob1, r, done, _ = self.env.step(act)
-            # for step in steps:
-            #     self.memory.collect(step)
-            self.memory.collect((h, act, r, done, v))
-            self.imagination.collect(h, act)
+            self.memory.collect((ob, act, r, done, v))
             ob = ob1.copy()
             ep_l += 1
             ep_r += r
@@ -172,48 +112,11 @@ class Worker(object):
 
         self.t += t
         return self.memory.release(v=v, done=done, t=t), self.compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep,
-                                                                                   self.t, d_mean)
+                                                                                   self.t)
 
-    def explore_options(self, world_state, n_branches, th=.81):
-
-        if n_branches == 0 or self.imagination.is_trained == False:
-            act, state_value = self.agent.get_action_value(world_state)
-            return act, state_value, 0, (0, 0), [],[]
-
-        actions, scores, confs, depths, rs = [], [], [], [], []
-        actions_history = []
-        steps = []
-        for branch in range(n_branches):
-            self.imagination.set_state(world_state)
-
-            act, state_value = self.agent.get_action_value(world_state)
-            prob = 1.
-            actions.append(act)
-            actions_history.append([])
-            ep_r = 0
-            for depth in range(10):
-
-                # done is always set to false in the imagination
-                imaginated_ob, r, done, _ = self.imagination.step(act)
-                ep_r += r
-                prob *= self.imagination.model.confidence(obs=imaginated_ob, acts=act)
-                act, state_value = self.agent.get_action_value(imaginated_ob)
-                if prob < th:
-                    break
-                actions_history[-1].append(act)
-            steps.append((imaginated_ob, act, r, done, state_value))
-            scores.append(state_value)
-            rs.append(ep_r)
-            depths.append(depth)
-        best_branch = np.argmax(scores)
-        act = actions[best_branch]
-        action_history = actions_history[best_branch]
-        v = self.agent.get_value(state=world_state)
-        depths = np.array(depths)
-        return act, v, max(scores), (depths.mean(), depths.var()), action_history, steps
 
     @staticmethod
-    def compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t, depth_mean):
+    def compute_summary(ep_l, ep_r, ep_rws, ep_ls, ep, t ):
         ep_stats = {
             'last_ep_rw': ep_r,
             'last_ep_len': ep_l,
@@ -221,7 +124,6 @@ class Worker(object):
             'avg_len': np.array(ep_ls).mean(),
             'total_steps': t,
             'total_ep': ep,
-            'depth_mean': np.array(depth_mean).mean()
         }
         return ep_stats
 

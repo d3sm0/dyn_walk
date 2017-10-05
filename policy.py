@@ -1,15 +1,16 @@
 import tensorflow as tf
-
+from kafnets.tf_kafnets import KAFNet
 from utils.tf_utils import fc, GaussianPD, get_params, _clip_grad
 
 
 class PolicyNetwork(object):
-    def __init__(self, name, obs_dim, act_dim, kl_target=0.003, eta=50, act=tf.tanh, h_size=(128, 64, 32),
-                 is_recurrent=False):
+    def __init__(self, name, obs_dim, act_dim, act=tf.nn.tanh, kl_target=0.003, eta=50, h_size=(128, 64, 32),
+                 is_recurrent=False, dict_size=20):
         self.name = name
+
         with tf.variable_scope(name):
             self._init_ph(obs_dim, act_dim)
-            self._init_network(act_dim, act=act, h_size=h_size, is_recurrent=is_recurrent)
+            self._init_network(act_dim, act=act, h_size=h_size, is_recurrent=is_recurrent, dict_size=dict_size)
             self._params = get_params(name)
             self._init_pi(act_dim)
             self.losses = self.train_op(kl_target, eta)
@@ -23,12 +24,17 @@ class PolicyNetwork(object):
         self.mu_old = tf.placeholder('float32', (None, act_dim), name='mu_old')
         self.logstd_old = tf.placeholder('float32', (1, act_dim), name='logstd_old')
 
-    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.nn.tanh, is_recurrent=False):
-        h = fc(self.obs, h_size[0], act=act, name='input')
-        d = tf.linspace(start=-2., stop=2., num=30)
-        # alpha = tf.get_variable('fc_a', shape = (128, 30))
-        # from kafnets.tf_kafnets import KAFNet
-        # h = KAFNet.kaf(linear=h, D = d, alpha = alpha)
+    def _init_network(self, act_dim, h_size=(128, 64, 32), act=tf.nn.tanh, is_recurrent=False, dict_size=20,
+                      dict_min=-2., dict_max=2.):
+
+        h = fc(self.obs, h_size[0], act=None, name='input')
+
+        if act == 'kafnet':
+            d = tf.linspace(start=dict_min, stop=dict_max, num=dict_size)
+            alpha = tf.get_variable('fc_a', shape=(h_size[0], dict_size))
+            h = KAFNet.kaf(linear=h, D=d, alpha=alpha)
+        else:
+            h = act(h)
         if is_recurrent:
 
             from tensorflow.contrib.rnn import BasicLSTMCell
@@ -37,9 +43,12 @@ class PolicyNetwork(object):
             h = tf.reshape(h, (-1, cell.state_size.c))
         else:
             for i in range(len(h_size)):
-                h = fc(h, h_size[i], act=act, name='h{}'.format(i))
-                # alpha = tf.get_variable(name = 'h{}'.format(i), shape = (h_size[i],30))
-                # h = KAFNet.kaf(linear=h, D=d, alpha=alpha, kernel='periodic')
+                h = fc(h, h_size[i], act=None, name='h{}'.format(i))
+                if act == 'kafnet':
+                    alpha = tf.get_variable(name='h{}'.format(i), shape=(h_size[i], dict_size))
+                    h = KAFNet.kaf(linear=h, D=d, alpha=alpha, kernel='rbf')
+                else:
+                    h = act(h)
         self.mu = fc(h, act_dim, act=None, name='mu')
         self.logstd = tf.get_variable('log_std', (1, act_dim), tf.float32, tf.zeros_initializer())
         self.std = tf.exp(self.logstd)

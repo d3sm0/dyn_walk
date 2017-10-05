@@ -13,4 +13,8 @@ model.py
 cache/dataset.pkl
 tf-models
 *.png
-kafnets
+
+tests
+img.py
+model/
+kafnets/

@@ -1,8 +1,5 @@
 {
   "ENV_NAME":"Walker2d-v1",
-  "CONCATENATE_FRAMES": 1,
-  "FRAME_RATE": 50,
-  "USE_RW": false,
   "NORMALIZE": true,
   "MEMORY_SIZE": 1000000,
   "BATCH_SIZE": 64,
@@ -18,10 +15,9 @@
   "BETA": 1.0,
   "H_SIZE": [128,64,32],
   "POLICY":"fc",
-  "IMG_MODEL":"fc",
+  "ACT":"kafnet",
   "IS_RECURRENT":false,
   "SAVE_EVERY": 32768,
   "REPORT_EVERY": 4096,
-  "LOG_BRANCH_WIDTH": 0,
-  "LAST_RUN":false
+  "DICT_SIZE": 20
 }

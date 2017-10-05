@@ -6,7 +6,7 @@ env = gym.make('Walker2d-v1')
 act_dim = env.action_space.shape[0]
 obs_dim = env.observation_space.shape[0]
 
-policy = PolicyNetwork(obs_dim , act_dim)
+policy = PolicyNetwork(obs_dim, act_dim)
 sess = tf.InteractiveSession()
 sess.run(tf.global_variables_initializer())
 s = env.reset()
